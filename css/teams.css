@@ -31,6 +31,44 @@
     margin-top: 20px;
 }
 
+.bulk-player-entry {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid var(--hive-border);
+}
+
+.bulk-player-textarea {
+    width: 100%;
+    min-height: 120px;
+    margin-top: 8px;
+    padding: 12px;
+    background: var(--hive-card);
+    border: 2px solid var(--hive-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font: inherit;
+    resize: vertical;
+}
+
+.bulk-player-textarea:focus {
+    outline: none;
+    border-color: var(--hive-yellow);
+}
+
+.bulk-player-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+
+.bulk-player-actions .help-text {
+    margin: 0;
+    flex: 1;
+}
+
 .color-picker-wrapper {
     display: flex;
     align-items: center;
@@ -368,6 +406,11 @@ input[type="color"]::-webkit-color-swatch {
 @media (max-width: 768px) {
     .team-creator {
         grid-template-columns: 1fr;
+    }
+
+    .bulk-player-actions {
+        flex-direction: column;
+        align-items: stretch;
     }
 
     .teams-grid {
