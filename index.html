@@ -170,6 +170,16 @@
                         <button id="addPlayer" class="btn btn-primary">Add Player</button>
                     </div>
                 </div>
+                <div class="bulk-player-entry">
+                    <label for="bulkPlayerNames">Bulk IGNs:</label>
+                    <textarea id="bulkPlayerNames" class="bulk-player-textarea"
+                        placeholder="Paste IGNs separated by commas or new lines...&#10;FrostByte&#10;NovaRush&#10;PixelClutch"></textarea>
+                    <div class="bulk-player-actions">
+                        <p class="help-text">Use commas or one IGN per line. Existing players will be moved to the
+                            selected team.</p>
+                        <button id="addBulkPlayers" class="btn btn-secondary">Add Bulk IGNs</button>
+                    </div>
+                </div>
             </div>
 
             <!-- Teams Display -->
@@ -200,6 +210,14 @@
                 <p class="help-text">Individual player statistics tracked during the current game</p>
                 <div id="playerStats" class="player-stats">
                     <p class="empty-state">No player data available!</p>
+                </div>
+            </div>
+
+            <div class="section section-spacing">
+                <h2 class="section-title">Point Record</h2>
+                <p class="help-text">Current game point events and cumulative team totals</p>
+                <div id="pointRecord" class="point-record">
+                    <p class="empty-state">No point records yet!</p>
                 </div>
             </div>
 

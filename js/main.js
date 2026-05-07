@@ -15,6 +15,7 @@ class HiveEventScorer {
         this.teamsFullyFinished = []; // Track which teams have all players finished
         this.gameHistory = []; // Store completed games with their stats
         this.hasUnsavedChanges = false;
+        this.editingGameId = null; // Track which saved game is being edited
 
         // Predefined teams with color codes
         this.predefinedTeams = {
@@ -189,6 +190,14 @@ class HiveEventScorer {
             this.updateActivityLog();
         });
 
+        // Game history editing (for manual point adjustments)
+        const gameHistory = document.getElementById('gameHistory');
+        if (gameHistory) {
+            gameHistory.addEventListener('click', (e) => {
+                this.handleGameHistoryActions(e);
+            });
+        }
+
         // Team management
         this.setupTeamManagement();
 
@@ -240,6 +249,14 @@ class HiveEventScorer {
                 if (e.key === 'Enter') {
                     this.addPlayerToTeam();
                 }
+            });
+        }
+
+        // Bulk IGN add
+        const addBulkBtn = document.getElementById('addBulkPlayers');
+        if (addBulkBtn) {
+            addBulkBtn.addEventListener('click', () => {
+                this.addPlayerToTeam(true);
             });
         }
 
@@ -348,7 +365,17 @@ class HiveEventScorer {
         };
 
         this.gameHistory.push(gameRecord);
+        this.syncPersistentData();
         this.addLog(`Game saved to history: ${this.currentGame.gamemode}`, 'info');
+    }
+
+    syncPersistentData() {
+        // Save game history and current game state to localStorage
+        localStorage.setItem('hive_game_history', JSON.stringify(this.gameHistory));
+        localStorage.setItem('hive_event_data', JSON.stringify({
+            scores: this.scores,
+            playerStats: this.playerStats
+        }));
     }
 
     startNewGame() {
@@ -391,6 +418,7 @@ class HiveEventScorer {
             };
         });
 
+        this.syncPersistentData();
         this.addLog(`Started new ${this.gamemode} game`, 'info');
         this.updateUI();
     }
@@ -426,7 +454,7 @@ class HiveEventScorer {
 
     parseLine(line) {
         // Check if line has the kill/elimination prefix
-        const hasPrefix = line.includes('§c§l»');
+        const hasPrefix = line.includes('-§c§l-+');
         const cleanLine = this.stripColorCodes(line);
 
         // Check for team elimination
@@ -474,20 +502,15 @@ class HiveEventScorer {
                 const team = this.teams[teamName];
                 if (team.players) {
                     for (const playerName of team.players) {
-                        const player = this.getOrCreatePlayerStats(playerName, teamName);
-                        if (!player.eliminated) {
-                            player.eliminated = true;
-                            if (!this.playerEliminationOrder.includes(playerName)) {
-                                this.playerEliminationOrder.push(playerName);
-                            }
-                        }
+                        this.markPlayerEliminated(playerName, teamName);
                     }
                 }
 
                 this.addLog(`${teamName} eliminated (${this.eliminationOrder.length} teams out)`, 'warning');
 
-                // Calculate placement based on elimination order
-                this.calculatePlacements();
+                // Record team placement and try to finalize if only one team left
+                this.recordTeamEliminationIfNeeded(teamName);
+                this.tryFinalizeGamePlacements();
                 return true;
             }
         }
@@ -509,8 +532,8 @@ class HiveEventScorer {
                 this.awardPoints(teamName, '1st place');
                 this.addLog(`${teamName} WON!`, 'success');
 
-                // Calculate final placements for all teams
-                this.calculatePlacements();
+                // Finalize all team and player placements
+                this.finalizeGamePlacements(teamName);
                 return true;
             }
         }
@@ -557,7 +580,7 @@ class HiveEventScorer {
             return true;
         }
 
-        // Extract text after the » prefix
+        // Extract text after the prefix and » symbol
         const match = line.match(/»\s*(.+)/i);
         if (!match) return false;
 
@@ -578,10 +601,11 @@ class HiveEventScorer {
 
         // Need at least 2 players: killer and victim
         if (playersFound.length >= 2) {
+            // First player = killer, last player = victim
             const killer = playersFound[0].name;
             const killerTeam = playersFound[0].team;
-            const victim = playersFound[1].name;
-            const victimTeam = playersFound[1].team;
+            const victim = playersFound[playersFound.length - 1].name;
+            const victimTeam = playersFound[playersFound.length - 1].team;
 
             // Track stats
             const killerStats = this.getOrCreatePlayerStats(killer, killerTeam);
@@ -590,10 +614,8 @@ class HiveEventScorer {
             const victimStats = this.getOrCreatePlayerStats(victim, victimTeam);
             victimStats.deaths++;
 
-            // Track player elimination
-            if (!this.playerEliminationOrder.includes(victim)) {
-                this.playerEliminationOrder.push(victim);
-            }
+            // Mark victim as eliminated
+            this.markPlayerEliminated(victim, victimTeam);
 
             // Award points to killer's team
             this.awardPoints(killerTeam, 'Kill');
@@ -604,8 +626,8 @@ class HiveEventScorer {
             });
             this.addLog(`${killerTeam} - ${killer} eliminated ${victim}`, 'success');
 
-            // Calculate player placements
-            this.calculatePlayerPlacements();
+            // Try to finalize placements if only one team active
+            this.tryFinalizeGamePlacements();
             return true;
         }
 
@@ -791,42 +813,155 @@ class HiveEventScorer {
         }
     }
 
-    addPlayerToTeam() {
-        const playerName = document.getElementById('playerName').value.trim();
-        const teamName = document.getElementById('teamSelect').value;
-
-        if (!playerName) {
-            alert('Please enter a player name!');
-            return;
+    // New helper methods for placement tracking
+    markPlayerEliminated(playerName, teamName) {
+        const player = this.getOrCreatePlayerStats(playerName, teamName);
+        if (!player.eliminated) {
+            player.eliminated = true;
+            if (!this.playerEliminationOrder.includes(playerName)) {
+                this.playerEliminationOrder.push(playerName);
+            }
         }
+    }
+
+    recordTeamEliminationIfNeeded(teamName) {
+        // Record team placement based on elimination order
+        const totalTeams = Object.keys(this.teams).length;
+        const placement = totalTeams - this.eliminationOrder.indexOf(teamName);
+        const placementKey = this.getPlacementKey(placement);
+        if (placementKey && !this.hasPlacement(teamName, placementKey)) {
+            this.awardPoints(teamName, placementKey);
+        }
+    }
+
+    getPlacementKey(position) {
+        const map = { 1: '1st place', 2: '2nd place', 3: '3rd place', 4: '4th place', 5: '5th place' };
+        return map[position] || null;
+    }
+
+    getActiveTeams() {
+        return Object.keys(this.teams).filter(teamName => {
+            return !this.eliminationOrder.includes(teamName);
+        });
+    }
+
+    tryFinalizeGamePlacements() {
+        const activeTeams = this.getActiveTeams();
+        if (activeTeams.length === 1) {
+            // Only one team left - they're the winner!
+            this.finalizeGamePlacements(activeTeams[0]);
+        }
+    }
+
+    recordTeamPlacement(teamName, placement) {
+        const placementKey = this.getPlacementKey(placement);
+        if (placementKey && !this.hasPlacement(teamName, placementKey)) {
+            this.awardPoints(teamName, placementKey);
+        }
+        // Update all players on this team with their placement
+        const team = this.teams[teamName];
+        if (team && team.players) {
+            for (const playerName of team.players) {
+                const player = this.getOrCreatePlayerStats(playerName, teamName);
+                if (!player.placement) {
+                    player.placement = `${placement}${this.getOrdinalSuffix(placement)}`;
+                }
+            }
+        }
+    }
+
+    finalizeGamePlacements(winnerTeamName) {
+        // Finalize all team placements at game end
+        const totalTeams = Object.keys(this.teams).length;
+        const allTeams = Object.keys(this.teams);
+
+        // 1. Winner gets 1st place
+        if (winnerTeamName && !this.hasPlacement(winnerTeamName, '1st place')) {
+            this.recordTeamPlacement(winnerTeamName, 1);
+        }
+
+        // 2. Process teams in elimination order (first eliminated = last place)
+        for (let i = 0; i < this.eliminationOrder.length; i++) {
+            const teamName = this.eliminationOrder[i];
+            const placement = totalTeams - i;
+            this.recordTeamPlacement(teamName, placement);
+        }
+
+        // 3. Handle any remaining teams not eliminated and not winner
+        for (const teamName of allTeams) {
+            if (teamName !== winnerTeamName && !this.eliminationOrder.includes(teamName)) {
+                // These teams survived but didn't win - give them 2nd place (or next available)
+                const remainingSlot = 2;
+                this.recordTeamPlacement(teamName, remainingSlot);
+            }
+        }
+
+        this.addLog('All team and player placements finalized', 'info');
+    }
+
+    addPlayerToTeam(useBulkInput = falseuseBulkInput = false) {
+        const playerName = useBulkInput ? '' : document.getElementById('playerName').value.trim();
+        const teamName = document.getElementById('teamSelect').value;
 
         if (!teamName) {
             alert('Please select a team!');
             return;
         }
 
-        // Remove player from any existing team
-        this.removePlayerFromAllTeams(playerName);
+        let playersToAdd = [];
 
-        // Add player to selected team
-        if (!this.teams[teamName]) {
-            this.teams[teamName] = {
-                color: this.predefinedTeams[teamName].color,
-                colorCode: this.predefinedTeams[teamName].colorCode,
-                players: []
-            };
+        if (useBulkInput) {
+            const bulkText = document.getElementById('bulkPlayerNames').value.trim();
+            if (!bulkText) {
+                alert('Please enter player names in the bulk input area!');
+                return;
+            }
+            playersToAdd = this.parseBulkPlayerNames(bulkText);
+        } else {
+            if (!playerName) {
+                alert('Please enter a player name!');
+                return;
+            }
+            playersToAdd = [playerName];
         }
 
-        if (!this.teams[teamName].players.includes(playerName)) {
-            this.teams[teamName].players.push(playerName);
+        // Add all players to the selected team
+        for (const name of playersToAdd) {
+            // Remove player from any existing team
+            this.removePlayerFromAllTeams(name);
+
+            // Add player to selected team
+            if (!this.teams[teamName]) {
+                this.teams[teamName] = {
+                    color: this.predefinedTeams[teamName].color,
+                    colorCode: this.predefinedTeams[teamName].colorCode,
+                    players: []
+                };
+            }
+
+            if (!this.teams[teamName].players.includes(name)) {
+                this.teams[teamName].players.push(name);
+            }
         }
 
-        // Clear input
+        // Clear inputs
         document.getElementById('playerName').value = '';
+        if (useBulkInput) {
+            document.getElementById('bulkPlayerNames').value = '';
+        }
 
+        this.addLog(`Added ${playersToAdd.length} player(s) to ${teamName}`, 'info');
         this.saveTeams();
         this.renderTeams();
         this.updateUI();
+    }
+
+    parseBulkPlayerNames(rawNames) {
+        // Split by newlines and/or commas, then clean up
+        return rawNames
+            .split(/[\n,]+/)
+            .map(name => name.trim())
+            .filter(name => name.length > 0);
     }
 
     removePlayerFromAllTeams(playerName) {
@@ -1047,7 +1182,7 @@ class HiveEventScorer {
                             ${teamOptions}
                         </select>
                     </div>
-                    <button class="remove-player-btn" data-team="${teamName}" data-player="${this.escapeHtml(player)}" title="Remove player">×</button>
+                    <button class="remove-player-btn" data-team="${teamName}" data-player="${this.escapeHtml(player)}" title="Remove player">+�</button>
                 </div>
             `;
         }
@@ -1071,12 +1206,14 @@ class HiveEventScorer {
         }
 
         let html = '<div class=\"player-stats-grid\">';
-        const sortedPlayers = Object.entries(this.playerStats).sort((a, b) => {
-            // Sort by: eliminated (false first), then by kills, then by deaths (fewer is better)
-            if (a[1].eliminated !== b[1].eliminated) return a[1].eliminated ? 1 : -1;
-            if (b[1].kills !== a[1].kills) return b[1].kills - a[1].kills;
-            return a[1].deaths - b[1].deaths;
-        });
+        const sortedPlayers = Object.entries(this.playerStats)
+            .filter(([playerName]) => this.findPlayerTeam(playerName)) // Only show registered players
+            .sort((a, b) => {
+                // Sort by: eliminated (false first), then by kills, then by deaths (fewer is better)
+                if (a[1].eliminated !== b[1].eliminated) return a[1].eliminated ? 1 : -1;
+                if (b[1].kills !== a[1].kills) return b[1].kills - a[1].kills;
+                return a[1].deaths - b[1].deaths;
+            });
 
         for (const [playerName, data] of sortedPlayers) {
             const teamColor = this.teams[data.team]?.color || '#888';
@@ -1088,7 +1225,7 @@ class HiveEventScorer {
                     <div class=\"stat-badge\" style=\"background: ${teamColor}\">${data.team}</div>
                     <div class=\"stat-row\">
                         <span>Status:</span>
-                        <span>${data.eliminated ? '❌ Eliminated' : '✅ Active'}</span>
+                        <span>${data.eliminated ? 'G�� Eliminated' : 'G�� Active'}</span>
                     </div>
                     <div class=\"stat-row\">
                         <span>Kills:</span>
@@ -1132,22 +1269,20 @@ class HiveEventScorer {
         }
 
         let html = '';
-        // Show most recent games first
         const sortedGames = [...this.gameHistory].reverse();
 
         for (const game of sortedGames) {
             const startDate = new Date(game.startTime);
             const endDate = new Date(game.endTime);
-            const duration = Math.round((endDate - startDate) / 60000); // minutes
-
-            // Get winning team
+            const duration = Math.round((endDate - startDate) / 60000);
+            const isEditing = String(this.editingGameId) === String(game.id);
             const sortedTeams = Object.entries(game.scores).sort((a, b) => b[1].score - a[1].score);
             const winner = sortedTeams[0];
 
             html += `
-                <div class=\"game-history-card\">
+                <div class=\"game-history-card ${isEditing ? 'editing' : ''}\" data-game-id=\"${game.id}\">
                     <div class=\"game-header\">
-                        <h3>🎮 ${game.gamemode}</h3>
+                        <h3>=�ī ${game.gamemode}</h3>
                         <span class=\"game-date\">${startDate.toLocaleString()}</span>
                     </div>
                     <div class=\"game-info\">
@@ -1159,14 +1294,27 @@ class HiveEventScorer {
                         <summary>View Full Scores & Player Stats</summary>
                         
                         <div class=\"game-scores\">
-                            <h4>Team Scores</h4>
+                            <div class=\"game-scores-header\">
+                                <h4>Team Scores</h4>
+                                ${isEditing ? `
+                                <div class=\"game-score-editor-actions\">
+                                    <button type=\"button\" class=\"btn btn-success btn-small\" data-action=\"save-game-scores\" data-game-id=\"${game.id}\">Save Scores</button>
+                                    <button type=\"button\" class=\"btn btn-secondary btn-small\" data-action=\"cancel-game-scores\" data-game-id=\"${game.id}\">Cancel</button>
+                                </div>
+                                ` : `
+                                <button type=\"button\" class=\"btn btn-info btn-small\" data-action=\"edit-game-scores\" data-game-id=\"${game.id}\">Edit Scores</button>
+                                `}
+                            </div>
+                            ${isEditing ? '<p class=\"game-score-editor-help\">Adjust the saved score for any team in this game. Totals refresh as soon as you save.</p>' : ''}
                             ${sortedTeams.map(([teamName, data], index) => {
                 const teamColor = this.teams[teamName]?.color || '#888';
                 return `
                                     <div class=\"score-row\" style=\"border-left: 3px solid ${teamColor}\">
                                         <span class=\"rank\">#${index + 1}</span>
                                         <span class=\"team-name\">${teamName}</span>
-                                        <span class=\"points\">${data.score} pts</span>
+                                        ${isEditing ? `
+                                            <input type=\"number\" class=\"score-editor-input\" data-team=\"${teamName}\" value=\"${data.score}\" min=\"0\" />
+                                        ` : `<span class=\"points\">${data.score} pts</span>`}
                                     </div>
                                 `;
             }).join('')}
@@ -1186,7 +1334,7 @@ class HiveEventScorer {
                                                 <span>D: ${data.deaths}</span>
                                                 <span>FK: ${data.finalKills}</span>
                                                 ${data.bedBreaks > 0 ? `<span>BB: ${data.bedBreaks}</span>` : ''}
-                                                ${data.placement ? `<span>🏆 #${data.placement}</span>` : ''}
+                                                ${data.placement ? `<span>=��� #${data.placement}</span>` : ''}
                                             </div>
                                         </div>
                                     `;
@@ -1210,136 +1358,188 @@ class HiveEventScorer {
             return;
         }
 
-        // Calculate overall stats
-        const teamWins = {};
-        const playerOverall = {};
-        let totalGames = this.gameHistory.length;
-        const gamemodeCount = {};
+        // Aggregate scores per player per gamemode
+        const playerScores = this.aggregatePlayerScores();
 
-        for (const game of this.gameHistory) {
-            // Count gamemode
-            gamemodeCount[game.gamemode] = (gamemodeCount[game.gamemode] || 0) + 1;
+        // Filter to only show registered players
+        const registeredPlayerScores = Object.entries(playerScores)
+            .filter(([playerName]) => this.findPlayerTeam(playerName));
 
-            // Find winner
-            const sortedTeams = Object.entries(game.scores).sort((a, b) => b[1].score - a[1].score);
-            const winnerTeam = sortedTeams[0][0];
-            teamWins[winnerTeam] = (teamWins[winnerTeam] || 0) + 1;
-
-            // Aggregate player stats
-            for (const [playerName, data] of Object.entries(game.playerStats)) {
-                if (!playerOverall[playerName]) {
-                    playerOverall[playerName] = {
-                        team: data.team,
-                        gamesPlayed: 0,
-                        totalKills: 0,
-                        totalDeaths: 0,
-                        totalFinalKills: 0,
-                        totalBedBreaks: 0,
-                        wins: 0
-                    };
-                }
-                playerOverall[playerName].gamesPlayed++;
-                playerOverall[playerName].totalKills += data.kills;
-                playerOverall[playerName].totalDeaths += data.deaths;
-                playerOverall[playerName].totalFinalKills += data.finalKills;
-                playerOverall[playerName].totalBedBreaks += data.bedBreaks;
-                if (data.team === winnerTeam) {
-                    playerOverall[playerName].wins++;
-                }
-            }
+        if (registeredPlayerScores.length === 0) {
+            overallStats.innerHTML = '<p class=\"empty-state\">No registered player data yet!</p>';
+            return;
         }
 
+        // Sort by total points descending
+        const sortedPlayers = registeredPlayerScores.sort((a, b) => b[1].totalPoints - a[1].totalPoints);
+
         let html = `
+            <div class=\"tutorial-tip\">
+                <strong>G�� Tutorial Tip:</strong> You can edit the per-gamemode scores below to fix bugs or make arbitrary point adjustments. Just click the score value next to each gamemode, change it, and press Enter or click outside to save.
+            </div>
+
             <div class=\"overall-summary\">
                 <div class=\"summary-card\">
-                    <div class=\"summary-value\">${totalGames}</div>
+                    <div class=\"summary-value\">${this.gameHistory.length}</div>
                     <div class=\"summary-label\">Total Games</div>
                 </div>
                 <div class=\"summary-card\">
-                    <div class=\"summary-value\">${Object.keys(playerOverall).length}</div>
-                    <div class=\"summary-label\">Players Tracked</div>
-                </div>
-                <div class=\"summary-card\">
-                    <div class=\"summary-value\">${Object.keys(teamWins).length}</div>
-                    <div class=\"summary-label\">Teams with Wins</div>
+                    <div class=\"summary-value\">${sortedPlayers.length}</div>
+                    <div class=\"summary-label\">Registered Players</div>
                 </div>
             </div>
 
-            <div class=\"gamemode-breakdown\">
-                <h3>Games by Mode</h3>
-                ${Object.entries(gamemodeCount).map(([mode, count]) => `
-                    <div class=\"mode-stat\">
-                        <span>${mode}</span>
-                        <span class=\"count\">${count} game${count !== 1 ? 's' : ''}</span>
-                    </div>
-                `).join('')}
-            </div>
+            <div class=\"player-leaderboard\">
+                <h3>Player Leaderboard (Total Points)</h3>
+                ${sortedPlayers.map(([playerName, data], index) => {
+            const teamName = this.findPlayerTeam(playerName);
+            const teamColor = this.teams[teamName]?.color || '#888';
+            const gamemodeBreakdowns = Object.entries(data.byGamemode).map(([mode, points]) => {
+                return `<span class=\"gamemode-score\" data-player=\"${this.escapeHtml(playerName)}\" data-gamemode=\"${mode}\" contenteditable=\"true\" data-original=\"${points}\">${points}</span> <span class=\"gamemode-label\">${mode}</span>`;
+            }).join(', ');
 
-            <div class=\"team-wins\">
-                <h3>Team Wins</h3>
-                ${Object.entries(teamWins).sort((a, b) => b[1] - a[1]).map(([team, wins]) => {
-            const teamColor = this.teams[team]?.color || '#888';
             return `
-                        <div class=\"win-stat\" style=\"border-left: 4px solid ${teamColor}\">
-                            <span class=\"team-name\">${team}</span>
-                            <span class=\"win-count\">${wins} win${wins !== 1 ? 's' : ''}</span>
+                        <div class=\"player-leaderboard-card\" style=\"border-left: 4px solid ${teamColor}\">
+                            <div class=\"leaderboard-rank\">#${index + 1}</div>
+                            <div class=\"leaderboard-player-info\">
+                                <h3>${this.escapeHtml(playerName)}</h3>
+                                <div class=\"stat-badge\" style=\"background: ${teamColor}\">${teamName}</div>
+                            </div>
+                            <div class=\"leaderboard-total\">${data.totalPoints} pts</div>
+                            <div class=\"leaderboard-breakdowns\">
+                                ${gamemodeBreakdowns || '<em>No scores yet</em>'}
+                            </div>
                         </div>
                     `;
         }).join('')}
             </div>
-
-            <div class=\"player-overall\">
-                <h3>Top Players (By Total Kills)</h3>
-                <div class=\"player-stats-grid\">
-                    ${Object.entries(playerOverall)
-                .sort((a, b) => b[1].totalKills - a[1].totalKills)
-                .slice(0, 10)
-                .map(([playerName, data]) => {
-                    const teamColor = this.teams[data.team]?.color || '#888';
-                    const kd = data.totalDeaths > 0 ? (data.totalKills / data.totalDeaths).toFixed(2) : data.totalKills;
-                    const winRate = ((data.wins / data.gamesPlayed) * 100).toFixed(0);
-                    return `
-                                <div class=\"player-stat-card\" style=\"border-left: 4px solid ${teamColor}\">
-                                    <h3>${this.escapeHtml(playerName)}</h3>
-                                    <div class=\"stat-badge\" style=\"background: ${teamColor}\">${data.team}</div>
-                                    <div class=\"stat-row\">
-                                        <span>Games Played:</span>
-                                        <span>${data.gamesPlayed}</span>
-                                    </div>
-                                    <div class=\"stat-row\">
-                                        <span>Wins:</span>
-                                        <span>${data.wins} (${winRate}%)</span>
-                                    </div>
-                                    <div class=\"stat-row highlight\">
-                                        <span>Total Kills:</span>
-                                        <span>${data.totalKills}</span>
-                                    </div>
-                                    <div class=\"stat-row\">
-                                        <span>Total Deaths:</span>
-                                        <span>${data.totalDeaths}</span>
-                                    </div>
-                                    <div class=\"stat-row\">
-                                        <span>K/D Ratio:</span>
-                                        <span>${kd}</span>
-                                    </div>
-                                    <div class=\"stat-row\">
-                                        <span>Final Kills:</span>
-                                        <span>${data.totalFinalKills}</span>
-                                    </div>
-                                    ${data.totalBedBreaks > 0 ? `
-                                    <div class=\"stat-row\">
-                                        <span>Bed Breaks:</span>
-                                        <span>${data.totalBedBreaks}</span>
-                                    </div>
-                                    ` : ''}
-                                </div>
-                            `;
-                }).join('')}
-                </div>
-            </div>
         `;
 
         overallStats.innerHTML = html;
+
+        // Add event listeners for editable score fields
+        document.querySelectorAll('.gamemode-score').forEach(el => {
+            el.addEventListener('blur', (e) => this.savePlayerGamemodeScore(e));
+            el.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.target.blur();
+                }
+            });
+        });
+    }
+
+    handleGameHistoryActions(event) {
+        const action = event.target.dataset.action;
+        if (!action) return;
+
+        const gameId = event.target.dataset.gameId;
+
+        if (action === 'edit-game-scores') {
+            this.editingGameId = gameId;
+            this.renderStats();
+        } else if (action === 'save-game-scores') {
+            this.saveEditedGameScores(gameId);
+        } else if (action === 'cancel-game-scores') {
+            this.editingGameId = null;
+            this.renderStats();
+        }
+    }
+
+    saveEditedGameScores(gameId) {
+        const gameIndex = this.gameHistory.findIndex(g => String(g.id) === String(gameId));
+        if (gameIndex === -1) return;
+
+        const card = document.querySelector(`.game-history-card[data-game-id=\"${gameId}\"]`);
+        if (!card) return;
+
+        const updatedScores = { ...this.gameHistory[gameIndex].scores };
+        card.querySelectorAll('.score-editor-input').forEach(input => {
+            const teamName = input.dataset.team;
+            const nextScore = parseInt(input.value, 10) || 0;
+            if (updatedScores[teamName]) {
+                updatedScores[teamName].score = nextScore;
+            }
+        });
+
+        this.gameHistory[gameIndex].scores = updatedScores;
+        this.editingGameId = null;
+        this.syncPersistentData();
+        this.renderStats();
+        this.addLog(`Updated saved scores for ${this.gameHistory[gameIndex].gamemode}`, 'success');
+    }
+
+    aggregatePlayerScores() {
+        const playerScores = {};
+
+        for (const game of this.gameHistory) {
+            const sortedTeams = Object.entries(game.scores).sort((a, b) => b[1].score - a[1].score);
+
+            for (const [teamName, teamScore] of sortedTeams) {
+                const team = this.teams[teamName];
+                if (!team || !team.players) continue;
+
+                // Divide team score among players
+                const playersInTeam = team.players.filter(p => game.playerStats[p]);
+                if (playersInTeam.length === 0) continue;
+
+                const pointsPerPlayer = Math.floor(teamScore.score / playersInTeam.length);
+
+                for (const playerName of playersInTeam) {
+                    if (!playerScores[playerName]) {
+                        playerScores[playerName] = {
+                            totalPoints: 0,
+                            byGamemode: {}
+                        };
+                    }
+
+                    playerScores[playerName].totalPoints += pointsPerPlayer;
+
+                    if (!playerScores[playerName].byGamemode[game.gamemode]) {
+                        playerScores[playerName].byGamemode[game.gamemode] = 0;
+                    }
+                    playerScores[playerName].byGamemode[game.gamemode] += pointsPerPlayer;
+                }
+            }
+        }
+
+        return playerScores;
+    }
+
+    savePlayerGamemodeScore(event) {
+        const el = event.target;
+        const playerName = el.dataset.player;
+        const gamemode = el.dataset.gamemode;
+        const originalScore = parseInt(el.dataset.original, 10);
+        const newScore = parseInt(el.textContent.trim(), 10);
+
+        if (isNaN(newScore) || newScore < 0) {
+            el.textContent = originalScore;
+            return;
+        }
+
+        if (newScore === originalScore) return;
+
+        // Update game history to reflect the new score
+        const scoreDelta = newScore - originalScore;
+
+        for (const game of this.gameHistory) {
+            if (game.gamemode !== gamemode) continue;
+
+            const teamName = this.findPlayerTeam(playerName);
+            if (!teamName || !game.scores[teamName]) continue;
+
+            const team = this.teams[teamName];
+            if (!team || !team.players || !team.players.includes(playerName)) continue;
+
+            // Adjust team score by the delta
+            game.scores[teamName].score += scoreDelta;
+        }
+
+        this.syncPersistentData();
+        el.dataset.original = newScore;
+        this.addLog(`Updated ${playerName}'s ${gamemode} score to ${newScore}`, 'success');
+        this.renderStats();
     }
 
     getOrCreatePlayerStats(playerName, teamName) {
@@ -1560,6 +1760,7 @@ class HiveEventScorer {
                 if (data.gamemode) this.gamemode = data.gamemode;
 
                 // Update UI to reflect loaded data
+                this.syncPersistentData();
                 this.updateUI();
                 this.renderTeams();
                 this.renderStats();
@@ -1632,9 +1833,9 @@ class HiveEventScorer {
         } else {
             // Initialize default detection patterns
             this.detectionPatterns = {
-                teamElimination: '» [PLAYER] has been ELIMINATED',
-                winner: '» [PLAYER] is the WINNER',
-                killPrefix: '§c§l»',
+                teamElimination: '-+ [PLAYER] has been ELIMINATED',
+                winner: '-+ [PLAYER] is the WINNER',
+                killPrefix: '-�c-�l-+',
                 bedBreak: "[PLAYER] destroyed [PLAYER]'s bed",
                 individualFinish: "[PLAYER] finished in (\\d+)(?:st|nd|rd|th) place"
             };
@@ -1733,9 +1934,9 @@ class HiveEventScorer {
 
         // Reset detection patterns
         this.detectionPatterns = {
-            teamElimination: '» [PLAYER] has been ELIMINATED',
-            winner: '» [PLAYER] is the WINNER',
-            killPrefix: '§c§l»',
+            teamElimination: '-+ [PLAYER] has been ELIMINATED',
+            winner: '-+ [PLAYER] is the WINNER',
+            killPrefix: '-�c-�l-+',
             bedBreak: "[PLAYER] destroyed [PLAYER]'s bed",
             individualFinish: "[PLAYER] finished in (\\d+)(?:st|nd|rd|th) place"
         };
@@ -1794,9 +1995,9 @@ class HiveEventScorer {
     populateDetectionPatterns() {
         if (!this.detectionPatterns) {
             this.detectionPatterns = {
-                teamElimination: '» [PLAYER] has been ELIMINATED',
-                winner: '» [PLAYER] is the WINNER',
-                killPrefix: '§c§l»',
+                teamElimination: '-+ [PLAYER] has been ELIMINATED',
+                winner: '-+ [PLAYER] is the WINNER',
+                killPrefix: '-�c-�l-+',
                 bedBreak: "[PLAYER] destroyed [PLAYER]'s bed",
                 individualFinish: "[PLAYER] finished in (\\d+)(?:st|nd|rd|th) place"
             };
