@@ -45,12 +45,16 @@ body {
     image-rendering: pixelated;
     image-rendering: -moz-crisp-edges;
     image-rendering: crisp-edges;
+    display: flex;
+    flex-direction: column;
 }
 
 .container {
     max-width: 1400px;
     margin: 0 auto;
     padding: 20px;
+    flex: 1;
+    width: 100%;
 }
 
 /* Header Styles */
@@ -573,11 +577,12 @@ textarea {
 /* Footer Styles */
 .app-footer {
     position: relative;
-    margin-top: 40px;
+    margin-top: auto;
     background: var(--hive-card);
     border-top: 3px solid var(--hive-purple);
     padding: 30px 20px;
     box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+    width: 100%;
 }
 
 .footer-content {
