@@ -16,6 +16,7 @@ class HiveEventScorer {
         this.gameHistory = []; // Store completed games with their stats
         this.hasUnsavedChanges = false;
         this.editingGameId = null; // Track which saved game is being edited
+        this.undoStack = []; // Stack for undo operations
 
         // Predefined teams with color codes
         this.predefinedTeams = {
@@ -190,6 +191,11 @@ class HiveEventScorer {
             this.updateActivityLog();
         });
 
+        // Undo button
+        document.getElementById('undoBtn').addEventListener('click', () => {
+            this.performUndo();
+        });
+
         // Game history editing (for manual point adjustments)
         const gameHistory = document.getElementById('gameHistory');
         if (gameHistory) {
@@ -264,11 +270,8 @@ class HiveEventScorer {
         const clearAllBtn = document.getElementById('clearAllPlayers');
         if (clearAllBtn) {
             clearAllBtn.addEventListener('click', () => {
-                if (confirm('Remove all players from all teams?')) {
-                    this.teams = {};
-                    this.saveTeams();
-                    this.renderTeams();
-                    this.updateUI();
+                if (confirm('Remove all players from all teams? This action can be undone.')) {
+                    this.clearAllPlayers();
                 }
             });
         }
@@ -899,7 +902,7 @@ class HiveEventScorer {
         this.addLog('All team and player placements finalized', 'info');
     }
 
-    addPlayerToTeam(useBulkInput = falseuseBulkInput = false) {
+    addPlayerToTeam(useBulkInput = false) {
         const playerName = useBulkInput ? '' : document.getElementById('playerName').value.trim();
         const teamName = document.getElementById('teamSelect').value;
 
@@ -994,6 +997,89 @@ class HiveEventScorer {
         this.saveTeams();
         this.renderTeams();
         this.updateUI();
+    }
+
+    clearAllPlayers() {
+        // Save current state for undo
+        const undoState = {
+            action: 'clearAllPlayers',
+            teams: JSON.parse(JSON.stringify(this.teams)),
+            activityLog: JSON.parse(JSON.stringify(this.activityLog)),
+            playerStats: JSON.parse(JSON.stringify(this.playerStats))
+        };
+
+        this.undoStack.push(undoState);
+
+        // Get all player names before clearing
+        const allPlayerNames = [];
+        for (const teamName in this.teams) {
+            if (this.teams[teamName].players) {
+                allPlayerNames.push(...this.teams[teamName].players);
+            }
+        }
+
+        // Clear teams
+        this.teams = {};
+
+        // Clear player stats
+        this.playerStats = {};
+
+        // Clear activity log entries that mention any player
+        if (allPlayerNames.length > 0) {
+            this.activityLog = this.activityLog.filter(log => {
+                const logText = log.message.toLowerCase();
+                return !allPlayerNames.some(playerName =>
+                    logText.includes(playerName.toLowerCase())
+                );
+            });
+        }
+
+        this.addLog('All players cleared from all teams', 'warning');
+        this.saveTeams();
+        this.renderTeams();
+        this.updateUI();
+
+        // Enable undo button
+        const undoBtn = document.getElementById('undoBtn');
+        if (undoBtn) {
+            undoBtn.disabled = false;
+        }
+    }
+
+    performUndo() {
+        if (this.undoStack.length === 0) {
+            alert('Nothing to undo!');
+            return;
+        }
+
+        const undoState = this.undoStack.pop();
+
+        switch (undoState.action) {
+            case 'clearAllPlayers':
+                // Restore teams
+                this.teams = undoState.teams;
+
+                // Restore activity log
+                this.activityLog = undoState.activityLog;
+
+                // Restore player stats
+                this.playerStats = undoState.playerStats;
+
+                this.addLog('Undo: Restored all players', 'info');
+                this.saveTeams();
+                this.renderTeams();
+                this.updateUI();
+                break;
+
+            default:
+                console.warn('Unknown undo action:', undoState.action);
+        }
+
+        // Disable undo button if stack is empty
+        const undoBtn = document.getElementById('undoBtn');
+        if (undoBtn && this.undoStack.length === 0) {
+            undoBtn.disabled = true;
+        }
     }
 
     changePlayerTeam(playerName, oldTeam, newTeam) {
@@ -1182,7 +1268,7 @@ class HiveEventScorer {
                             ${teamOptions}
                         </select>
                     </div>
-                    <button class="remove-player-btn" data-team="${teamName}" data-player="${this.escapeHtml(player)}" title="Remove player">+�</button>
+                    <button class="remove-player-btn" data-team="${teamName}" data-player="${this.escapeHtml(player)}" title="Remove player">×</button>
                 </div>
             `;
         }

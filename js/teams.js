@@ -19,6 +19,7 @@ class TeamManager {
         };
 
         this.teams = {}; // Actual teams with players
+        this.undoStack = []; // Stack for undo operations
 
         this.init();
     }
@@ -44,12 +45,18 @@ class TeamManager {
 
         // Clear all players
         document.getElementById('clearAllPlayers').addEventListener('click', () => {
-            if (confirm('Remove all players from all teams?')) {
-                this.teams = {};
-                this.saveData();
-                this.render();
+            if (confirm('Remove all players from all teams? This action can be undone.')) {
+                this.clearAllPlayers();
             }
         });
+
+        // Undo button (if it exists on teams page)
+        const undoBtn = document.getElementById('undoBtn');
+        if (undoBtn) {
+            undoBtn.addEventListener('click', () => {
+                this.performUndo();
+            });
+        }
 
         // Back to scorer
         document.getElementById('backToScorer').addEventListener('click', () => {
@@ -129,6 +136,61 @@ class TeamManager {
 
         this.saveData();
         this.render();
+    }
+
+    clearAllPlayers() {
+        // Save current state for undo
+        const undoState = {
+            action: 'clearAllPlayers',
+            teams: JSON.parse(JSON.stringify(this.teams))
+        };
+
+        this.undoStack.push(undoState);
+
+        // Clear teams
+        this.teams = {};
+
+        this.saveData();
+        this.render();
+
+        // Enable undo button if it exists
+        const undoBtn = document.getElementById('undoBtn');
+        if (undoBtn) {
+            undoBtn.disabled = false;
+        }
+
+        // Show success message
+        alert('All players cleared! Use the Undo button to restore if needed.');
+    }
+
+    performUndo() {
+        if (this.undoStack.length === 0) {
+            alert('Nothing to undo!');
+            return;
+        }
+
+        const undoState = this.undoStack.pop();
+
+        switch (undoState.action) {
+            case 'clearAllPlayers':
+                // Restore teams
+                this.teams = undoState.teams;
+
+                this.saveData();
+                this.render();
+
+                alert('Players restored!');
+                break;
+
+            default:
+                console.warn('Unknown undo action:', undoState.action);
+        }
+
+        // Disable undo button if stack is empty
+        const undoBtn = document.getElementById('undoBtn');
+        if (undoBtn && this.undoStack.length === 0) {
+            undoBtn.disabled = true;
+        }
     }
 
     render() {
