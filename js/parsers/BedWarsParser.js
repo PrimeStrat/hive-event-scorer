@@ -54,21 +54,26 @@
         }
 
         detectFirstPersonKill(clean) {
-            // "You killed <victim>" -> local player gets the kill.
+            // In BedWars, "You killed X" is a regular kill (victim respawns) — no kill point.
+            // Only FINAL KILLs award kill points. We still mark the victim's death so
+            // player stats stay accurate, but skip the kill credit for the local player.
             let m = clean.match(/»?\s*You killed\s+(.+?)\s*$/i);
             if (m) {
-                const killer = this.resolvePlayerName('You');
                 const victim = m[1].trim();
-                if (!killer) { return false; }
-                return this.recordKill(killer, victim) === 'kill';
+                const victimTeam = this.state.findPlayerTeam(victim);
+                if (victimTeam) {
+                    this.state.getOrCreatePlayerStats(victim, victimTeam).deaths++;
+                }
+                return true;
             }
-            // "You were killed by <killer>" -> local player is the victim.
+            // "You were killed by <killer>" — regular kill against local player; no kill pt to killer.
             m = clean.match(/»?\s*You were killed by\s+(.+?)\.?\s*$/i);
             if (m) {
-                const killer = m[1].replace(/\.$/, '').trim();
                 const victim = this.resolvePlayerName('You');
                 if (!victim) return false;
-                return this.recordKill(killer, victim) === 'kill';
+                const victimTeam = this.state.findPlayerTeam(victim);
+                if (victimTeam) this.state.getOrCreatePlayerStats(victim, victimTeam).deaths++;
+                return true;
             }
             return false;
         }
