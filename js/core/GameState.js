@@ -264,6 +264,34 @@
             }
         }
 
+        /**
+         * Wipe all scoring statistics — current game, scores, per-player stats,
+         * elimination/finish tracking, completed game history, and undo/redo — while
+         * KEEPING team rosters (teams are only cleared from the Teams tab). Also
+         * clears the persisted game/event localStorage keys so the wipe survives
+         * reload; the hive_teams key is left intact.
+         */
+        wipeStatistics() {
+            this.currentGame = null;
+            this.scores = {};
+            this.playerStats = {};
+            this.eliminationOrder = [];
+            this.playerEliminationOrder = [];
+            this.playersFinished = {};
+            this.teamsFullyFinished = [];
+            this.gameHistory = [];
+            this.currentGameCompleted = false;
+            this.editingGameId = null;
+            this.undoStack = [];
+            this.redoStack = [];
+
+            if (typeof localStorage !== 'undefined') {
+                localStorage.removeItem('hive_game_history');
+                localStorage.removeItem('hive_event_data');
+                localStorage.removeItem('hive_emergency_backup'); // legacy key cleanup
+            }
+        }
+
         hasDataToSave() {
             return Object.keys(this.playerStats).length > 0 ||
                 Object.keys(this.scores).length > 0 ||

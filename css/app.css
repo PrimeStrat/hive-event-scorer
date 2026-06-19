@@ -342,6 +342,13 @@ textarea { resize: vertical; min-height: 90px; }
 .pd-game-head { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 6px; }
 .pd-game-stats { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.82rem; color: var(--text-soft); }
 
+/* ---------- export dialog ---------- */
+.export-team-names { display: grid; gap: 8px; margin: 12px 0 4px; }
+.export-team-row { display: flex; align-items: center; gap: 10px; }
+.export-team-swatch { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; }
+.export-team-input { flex: 1; }
+.export-team-pts { color: var(--text-muted); font-size: 0.82rem; min-width: 56px; text-align: right; }
+
 /* ---------- toast ---------- */
 .toast-stack { position: fixed; top: 18px; right: 18px; display: grid; gap: 10px; z-index: 1100; max-width: 320px; }
 .toast {
@@ -369,6 +376,28 @@ textarea { resize: vertical; min-height: 90px; }
 
 /* ---------- print / export note ---------- */
 .export-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ---------- drag & drop overlay ---------- */
+.drop-overlay {
+    position: fixed; inset: 0; z-index: 1200;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(12, 9, 24, .82);
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
+    padding: 24px;
+}
+.drop-overlay.show { display: flex; }
+.drop-overlay-inner {
+    border: 3px dashed var(--hive-purple-light);
+    border-radius: var(--radius);
+    padding: 48px 64px;
+    text-align: center;
+    background: var(--surface);
+    max-width: 480px;
+}
+.drop-overlay .drop-icon { font-size: 3rem; color: var(--hive-yellow); margin-bottom: 8px; }
+.drop-overlay h2 { color: var(--hive-yellow); margin-bottom: 8px; }
+.drop-overlay p { color: var(--text-soft); font-size: 0.9rem; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 720px) {
