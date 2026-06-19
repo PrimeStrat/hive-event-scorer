@@ -84,29 +84,108 @@
             const gh = document.getElementById('gameHistory');
             if (gh) gh.addEventListener('click', e => this.handleGameHistoryActions(e));
 
-            // PNG poster exports
-            this.on('exportPlayersPng', 'click', () => this.exportPlayerStandingsPNG());
-            this.on('exportWinnersPng', 'click', () => this.exportEventWinnersPNG());
+            // PNG poster exports open the edit dialog first
+            this.on('exportPlayersPng', 'click', () => this.openExportModal());
+            this.on('exportWinnersPng', 'click', () => this.openExportModal());
+            this.on('exportDoWinners', 'click', () => this.generatePoster('winners'));
+            this.on('exportDoPlayers', 'click', () => this.generatePoster('players'));
+            this.on('exportModalClose', 'click', () => this.closeModal('exportModal'));
+            this.on('wipeStats', 'click', () => this.wipeStatistics());
 
             // Player-detail modal close (button + backdrop click)
-            this.on('playerModalClose', 'click', () => this.closePlayerModal());
-            const modal = document.getElementById('playerModal');
-            if (modal) modal.addEventListener('click', e => { if (e.target === modal) this.closePlayerModal(); });
-            document.addEventListener('keydown', e => { if (e.key === 'Escape') this.closePlayerModal(); });
+            this.on('playerModalClose', 'click', () => this.closeModal('playerModal'));
+            ['playerModal', 'exportModal'].forEach(id => {
+                const m = document.getElementById(id);
+                if (m) m.addEventListener('click', e => { if (e.target === m) this.closeModal(id); });
+            });
+            document.addEventListener('keydown', e => {
+                if (e.key === 'Escape') { this.closeModal('playerModal'); this.closeModal('exportModal'); }
+            });
 
             this.setupTeamManagement();
             this.setupSettingsManagement();
-
-            const sort = document.getElementById('playerStatsSort');
-            if (sort) {
-                sort.value = this.statsView.sortMode;
-                sort.addEventListener('change', e => { this.statsView.sortMode = e.target.value; this.statsView.renderPlayerStats(); });
-            }
+            this.setupDragAndDrop();
         }
 
         on(id, evt, handler) {
             const el = document.getElementById(id);
             if (el) el.addEventListener(evt, handler);
+        }
+
+        // ================= drag & drop file import =================
+        setupDragAndDrop() {
+            const overlay = document.getElementById('dropOverlay');
+            let depth = 0; // dragenter/leave fire per child; count to know when truly gone
+
+            const showOverlay = on => { if (overlay) overlay.classList.toggle('show', on); };
+
+            window.addEventListener('dragenter', e => {
+                if (!this._hasFiles(e)) return;
+                e.preventDefault(); depth++; showOverlay(true);
+            });
+            window.addEventListener('dragover', e => { if (this._hasFiles(e)) e.preventDefault(); });
+            window.addEventListener('dragleave', e => {
+                if (!this._hasFiles(e)) return;
+                depth = Math.max(0, depth - 1);
+                if (depth === 0) showOverlay(false);
+            });
+            window.addEventListener('drop', e => {
+                if (!this._hasFiles(e)) return;
+                e.preventDefault(); depth = 0; showOverlay(false);
+                const files = Array.from(e.dataTransfer.files || []);
+                files.forEach(f => this.handleDroppedFile(f));
+            });
+        }
+
+        _hasFiles(e) {
+            return e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+        }
+
+        /**
+         * A file was dropped. JSON loads as save data; a .txt is treated as a chat
+         * log — we infer the gamemode from the filename, preselect it, load the text
+         * into the chat box, and process it automatically.
+         */
+        handleDroppedFile(file) {
+            if (/\.json$/i.test(file.name)) {
+                const reader = new FileReader();
+                reader.onload = ev => this._loadJsonText(ev.target.result);
+                reader.readAsText(file);
+                return;
+            }
+            if (!H.FileImport.isTextFile(file)) {
+                H.Toast.show(`"${file.name}" isn't a .txt or .json file.`, { title: 'Unsupported file', type: 'warning' });
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = ev => {
+                const text = ev.target.result;
+                const known = Object.keys(this.points.pointSystems);
+                const inferred = H.FileImport.inferGamemode(file.name, known);
+
+                if (inferred) {
+                    const sel = document.getElementById('gamemode');
+                    if (sel) sel.value = inferred;
+                    this.state.gamemode = inferred;
+                    this.startNewGame();
+                }
+
+                const input = document.getElementById('chatInput');
+                if (input) input.value = text;
+
+                if (inferred) {
+                    this.processChat(false);
+                    H.Toast.show(`Detected ${inferred} from "${file.name}" and processed the log.`,
+                        { title: 'Log imported', duration: 5000 });
+                } else {
+                    H.Toast.show(`Loaded "${file.name}". Pick a gamemode, then Process Chat. ` +
+                        `(Couldn't detect the gamemode from the filename.)`,
+                        { title: 'Log loaded', type: 'warning', duration: 7000 });
+                    this.switchTab('scorer');
+                }
+            };
+            reader.readAsText(file);
         }
 
         setupTeamManagement() {
@@ -358,22 +437,70 @@
             document.getElementById('playerModal').classList.add('open');
         }
 
-        closePlayerModal() {
-            const m = document.getElementById('playerModal');
+        closeModal(id) {
+            const m = document.getElementById(id);
             if (m) m.classList.remove('open');
         }
 
-        // ================= PNG poster export =================
-        exportPlayerStandingsPNG() {
-            const players = this.statsView.playerStandingsList();
-            H.PosterExport.playerStandings(players, 'Event Standings');
-            this.state.addLog('Exported player standings PNG', 'success');
+        // ================= PNG poster export (with edit dialog) =================
+        openExportModal() {
+            if (this.state.gameHistory.length === 0) {
+                H.Toast.show('No completed games to export yet.', { title: 'Nothing to export', type: 'warning' });
+                return;
+            }
+            // Remember the saved event title; prefill team-name override fields.
+            const titleInput = document.getElementById('exportEventTitle');
+            if (titleInput && !titleInput.value) titleInput.value = this._eventTitle || '';
+
+            const host = document.getElementById('exportTeamNames');
+            if (host) {
+                const standings = this.statsView.aggregateTeamStandings();
+                host.innerHTML = standings.map(t => `
+                    <div class="export-team-row">
+                        <span class="export-team-swatch" style="background:${t.teamColor}"></span>
+                        <input type="text" class="export-team-input" data-team="${this.statsView.escapeHtml(t.team)}"
+                            value="${this.statsView.escapeHtml(t.team)}" />
+                        <span class="export-team-pts">${t.points} pts</span>
+                    </div>`).join('');
+            }
+            document.getElementById('exportModal').classList.add('open');
         }
 
-        exportEventWinnersPNG() {
-            const teams = this.statsView.aggregateTeamStandings();
-            H.PosterExport.eventWinners(teams, 'Event Champions');
-            this.state.addLog('Exported event winners PNG', 'success');
+        /** Read the dialog's title + team-name overrides and produce one poster. */
+        generatePoster(kind) {
+            const titleInput = document.getElementById('exportEventTitle');
+            const title = (titleInput && titleInput.value.trim()) || 'Hive Event';
+            this._eventTitle = title;
+
+            // Map original team name -> host-edited display label.
+            const labels = {};
+            document.querySelectorAll('#exportTeamNames .export-team-input').forEach(inp => {
+                labels[inp.dataset.team] = (inp.value.trim() || inp.dataset.team);
+            });
+            const relabelTeam = name => labels[name] || name;
+
+            if (kind === 'winners') {
+                const teams = this.statsView.aggregateTeamStandings().map(t => ({ ...t, team: relabelTeam(t.team) }));
+                H.PosterExport.eventWinners(teams, title);
+                this.state.addLog('Exported event winners PNG', 'success');
+            } else {
+                const players = this.statsView.playerStandingsList().map(p => ({ ...p, team: relabelTeam(p.team) }));
+                H.PosterExport.playerStandings(players, title);
+                this.state.addLog('Exported player standings PNG', 'success');
+            }
+            H.Toast.show('Poster downloaded.', { title: 'Exported', duration: 3500 });
+        }
+
+        // ================= wipe statistics =================
+        wipeStatistics() {
+            if (!confirm('Wipe all statistics? This clears the current game, all scores, player stats, and game ' +
+                'history. Your teams are kept. This cannot be undone.')) return;
+            this.state.wipeStatistics();
+            this.state.syncToStorage();
+            this.state.addLog('Statistics wiped (teams kept)', 'warning');
+            this.statsView.renderAll();
+            this.updateUI();
+            H.Toast.show('All statistics wiped. Teams were kept.', { title: 'Statistics cleared', type: 'warning', duration: 5000 });
         }
 
         // ================= settings =================
@@ -443,24 +570,26 @@
         importJSON(e) {
             const file = e.target.files[0]; if (!file) return;
             const reader = new FileReader();
-            reader.onload = ev => {
-                try {
-                    this.state.applyData(JSON.parse(ev.target.result), { includeTeams: true });
-                    this.state.syncToStorage();
-                    this.applySavedGamemodeSelection();
-                    this.updateUI();
-                    this.teamsView.render();
-                    this.statsView.renderAll();
-                    alert('Data loaded successfully!');
-                    this.state.addLog('Data imported from JSON file', 'success');
-                } catch (err) {
-                    alert('Error loading data: Invalid JSON file format');
-                    console.error(err);
-                    this.state.addLog('Failed to import data', 'error');
-                }
-            };
+            reader.onload = ev => this._loadJsonText(ev.target.result);
             reader.readAsText(file);
             e.target.value = '';
+        }
+
+        _loadJsonText(text) {
+            try {
+                this.state.applyData(JSON.parse(text), { includeTeams: true });
+                this.state.syncToStorage();
+                this.applySavedGamemodeSelection();
+                this.updateUI();
+                this.teamsView.render();
+                this.statsView.renderAll();
+                H.Toast.show('Tournament data loaded.', { title: 'Loaded', duration: 4000 });
+                this.state.addLog('Data imported from JSON file', 'success');
+            } catch (err) {
+                alert('Error loading data: Invalid JSON file format');
+                console.error(err);
+                this.state.addLog('Failed to import data', 'error');
+            }
         }
 
         download(filename, obj) {

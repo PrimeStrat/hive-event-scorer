@@ -5,9 +5,10 @@
  *   1. Event standings  - team blocks ranked by total points, each listing its
  *      players' totals. Click a player to open a detail modal.
  *   2. All players      - compact "chips" of every player's total, click-through.
- *   3. Current game      - per-player performance for the in-progress game.
- *   4. Point record      - current-game events per team.
- *   5. Game history      - completed games (with inline score editing).
+ *   3. Game history      - completed games (with inline score editing).
+ *
+ * The Statistics tab focuses on cumulative event results; the live current game and
+ * point record live on the Scorer tab instead.
  *
  * Aggregation helpers (aggregatePlayerScores / aggregateTeamStandings /
  * playerDetail) are shared by the UI, the player modal, and the PNG poster export.
@@ -19,14 +20,11 @@
     class StatsRenderer extends Base {
         constructor(app) {
             super(app);
-            this.sortMode = 'points';
         }
 
         renderAll() {
             this.renderEventStandings();
             this.renderPlayerTotals();
-            this.renderPlayerStats();
-            this.renderPointRecord();
             this.renderGameHistory();
         }
 
@@ -186,80 +184,6 @@
             host.querySelectorAll('[data-player]').forEach(el => {
                 el.addEventListener('click', () => this.app.openPlayerModal(el.dataset.player));
             });
-        }
-
-        // ================= current-game player performance =================
-        renderPlayerStats() {
-            const host = this.$('playerStats');
-            if (!host) return;
-            const features = this.points.featuresFor(this.state.gamemode) || {};
-            const showCombat = !!features.kills;
-            const showBeds = !!features.bedBreaks;
-
-            const rows = Object.entries(this.state.playerStats)
-                .filter(([name]) => this.state.findPlayerTeam(name))
-                .map(([name, data]) => ({ name, data, contribution: this.engine.currentPlayerContribution(name, data) }));
-
-            if (rows.length === 0) {
-                host.innerHTML = '<p class="empty-state">No player data yet! Process some chat to see stats.</p>';
-                return;
-            }
-            rows.sort((a, b) => this.compareRows(a, b));
-
-            host.innerHTML = '<div class="player-stats-grid">' + rows.map(({ name, data, contribution }) => {
-                const color = this.teamColor(data.team);
-                return `
-                    <div class="player-stat-card ${data.eliminated ? 'eliminated' : ''}" style="border-left: 4px solid ${color}">
-                        <h3>${this.escapeHtml(name)}</h3>
-                        <div class="stat-badge" style="background: ${color}">${this.escapeHtml(data.team)}</div>
-                        <div class="stat-row highlight"><span>Points:</span><span>${contribution}</span></div>
-                        <div class="stat-row"><span>Status:</span><span>${data.eliminated ? 'Eliminated' : 'Active'}</span></div>
-                        ${data.placement ? `<div class="stat-row highlight"><span>Placement:</span><span>${data.placement}</span></div>` : ''}
-                        ${showCombat ? `
-                        <div class="stat-row"><span>Kills:</span><span>${data.kills}</span></div>
-                        <div class="stat-row"><span>Deaths:</span><span>${data.deaths}</span></div>
-                        <div class="stat-row"><span>Final Kills:</span><span>${data.finalKills}</span></div>` : ''}
-                        ${showBeds && data.bedBreaks > 0 ? `<div class="stat-row"><span>Bed Breaks:</span><span>${data.bedBreaks}</span></div>` : ''}
-                    </div>`;
-            }).join('') + '</div>';
-        }
-
-        compareRows(a, b) {
-            switch (this.sortMode) {
-                case 'kills': return b.data.kills - a.data.kills;
-                case 'finalKills': return b.data.finalKills - a.data.finalKills;
-                case 'bedBreaks': return (b.data.bedBreaks || 0) - (a.data.bedBreaks || 0);
-                case 'deathsLow': return a.data.deaths - b.data.deaths;
-                case 'deathsHigh': return b.data.deaths - a.data.deaths;
-                case 'placement': {
-                    const n = p => { const m = String(p || '').match(/\d+/); return m ? +m[0] : Number.MAX_SAFE_INTEGER; };
-                    return n(a.data.placement) - n(b.data.placement);
-                }
-                default: return b.contribution - a.contribution;
-            }
-        }
-
-        // ================= point record =================
-        renderPointRecord() {
-            const host = this.$('pointRecord');
-            if (!host) return;
-            if (!this.state.hasActiveScores()) {
-                host.innerHTML = '<p class="empty-state">No point records yet!</p>';
-                return;
-            }
-            const sorted = Object.entries(this.state.scores).sort((a, b) => b[1].score - a[1].score);
-            host.innerHTML = sorted.map(([teamName, data]) => {
-                const color = this.teamColor(teamName);
-                const events = (data.events || []).slice().reverse().slice(0, 12);
-                const eventHtml = events.length
-                    ? events.map(e => `<li>${this.escapeHtml(e.type)} <span class="pr-pts">+${e.points}</span></li>`).join('')
-                    : '<li class="empty-state">No events</li>';
-                return `
-                    <div class="point-record-team" style="border-left: 3px solid ${color}">
-                        <div class="pr-head"><span class="team-name" style="color:${color}">${this.escapeHtml(teamName)}</span><span class="pr-total">${data.score} pts</span></div>
-                        <ul class="pr-events">${eventHtml}</ul>
-                    </div>`;
-            }).join('');
         }
 
         // ================= game history =================

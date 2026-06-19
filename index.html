@@ -117,13 +117,10 @@
                     </div>
                 </div>
             </div>
-
-
         </div>
-    </div>
 
-    <!-- Teams Tab -->
-    <div id="teams" class="tab-content">
+        <!-- Teams Tab -->
+        <div id="teams" class="tab-content">
         <div class="teams-container">
             <!-- Add Player to Team -->
             <div class="section">
@@ -197,6 +194,7 @@
                     <div class="export-actions">
                         <button type="button" id="exportWinnersPng" class="btn btn-primary">Export Winners PNG</button>
                         <button type="button" id="exportPlayersPng" class="btn btn-info">Export Players PNG</button>
+                        <button type="button" id="wipeStats" class="btn btn-danger">Wipe Statistics</button>
                     </div>
                 </div>
                 <p class="help-text">Cumulative team scores across the whole event, with each team's player
@@ -213,34 +211,6 @@
                     and placements.</p>
                 <div id="playerTotals" class="player-totals">
                     <p class="empty-state">No player totals yet.</p>
-                </div>
-            </div>
-
-            <!-- Current in-progress game -->
-            <div class="section section-spacing">
-                <h2 class="section-title">Current Game — Player Performance</h2>
-                <div class="player-performance-toolbar">
-                    <label for="playerStatsSort">Sort by:</label>
-                    <select id="playerStatsSort">
-                        <option value="points">Most Points</option>
-                        <option value="kills">Most Kills</option>
-                        <option value="finalKills">Most Final Kills</option>
-                        <option value="bedBreaks">Most Bed Breaks</option>
-                        <option value="placement">Best Placement</option>
-                        <option value="deathsLow">Fewest Deaths</option>
-                        <option value="deathsHigh">Most Deaths</option>
-                    </select>
-                </div>
-                <div id="playerStats" class="player-stats">
-                    <p class="empty-state">No player data available!</p>
-                </div>
-            </div>
-
-            <div class="section section-spacing">
-                <h2 class="section-title">Point Record</h2>
-                <p class="help-text">Current game point events and cumulative team totals</p>
-                <div id="pointRecord" class="point-record">
-                    <p class="empty-state">No point records yet!</p>
                 </div>
             </div>
 
@@ -263,6 +233,29 @@
                 <button type="button" id="playerModalClose" class="modal-close" aria-label="Close dialog">×</button>
             </div>
             <div id="playerModalBody" class="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- Export poster modal: edit event title + team display names before export -->
+    <div id="exportModal" class="modal" aria-hidden="true">
+        <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="exportModalTitle">
+            <div class="modal-header">
+                <h2 id="exportModalTitle">Export Poster</h2>
+                <button type="button" id="exportModalClose" class="modal-close" aria-label="Close dialog">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="pattern-group">
+                    <label for="exportEventTitle">Event title</label>
+                    <input type="text" id="exportEventTitle" placeholder="e.g. Prime Spring Invitational">
+                </div>
+                <p class="help-text">Edit team display names below if you want different labels on the poster.
+                    These overrides apply to the exported image only — they don't change your teams.</p>
+                <div id="exportTeamNames" class="export-team-names"></div>
+                <div class="input-actions">
+                    <button type="button" id="exportDoWinners" class="btn btn-primary">Download Winners PNG</button>
+                    <button type="button" id="exportDoPlayers" class="btn btn-info">Download Players PNG</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -351,6 +344,16 @@
     </div>
     </div>
 
+    <!-- Drag & drop overlay -->
+    <div id="dropOverlay" class="drop-overlay">
+        <div class="drop-overlay-inner">
+            <div class="drop-icon">⬇</div>
+            <h2>Drop a log or save file</h2>
+            <p>.txt chat logs are matched to a gamemode by filename and processed automatically.
+                .json files load tournament data.</p>
+        </div>
+    </div>
+
     <footer class="app-footer">
         <div class="footer-content">
             <div class="footer-section">
@@ -366,6 +369,7 @@
     <!-- Core (load order matters: utilities -> state -> engine) -->
     <script src="js/core/ChatUtils.js"></script>
     <script src="js/core/Toast.js"></script>
+    <script src="js/core/FileImport.js"></script>
     <script src="js/core/PosterExport.js"></script>
     <script src="js/core/PointSystem.js"></script>
     <script src="js/core/GameState.js"></script>

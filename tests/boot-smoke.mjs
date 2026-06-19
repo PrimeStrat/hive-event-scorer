@@ -57,7 +57,8 @@ class El {
     get innerHTML() { return this._html; }
     setAttribute(k, v) { this._attrs[k] = v; }
     getAttribute(k) { return this._attrs[k]; }
-    appendChild(c) { this.children.push(c); return c; }
+    appendChild(c) { this.children.push(c); c._parent = this; return c; }
+    remove() { if (this._parent) this._parent.children = this._parent.children.filter(x => x !== this); }
     addEventListener(type, fn) { (this._listeners[type] = this._listeners[type] || []).push(fn); }
     dispatch(type, ev = {}) { (this._listeners[type] || []).forEach(fn => fn(Object.assign({ target: this, currentTarget: this, preventDefault() {} }, ev))); }
     querySelectorAll() { return []; }
@@ -74,9 +75,10 @@ function mkEl(id, tag = 'div') { const e = new El(tag); e.id = id; registry.set(
     'chatInput', 'undoBtn', 'redoBtn', 'resetScores', 'scoreboard', 'clearLog', 'activityLog',
     'totalTeams', 'totalPlayers', 'teamPlacements', 'currentGamemode',
     'playerName', 'teamSelect', 'addPlayer', 'bulkPlayerNames', 'addBulkPlayers', 'clearAllPlayers', 'teamsGrid',
-    'playerStatsSort', 'playerStats', 'pointRecord', 'gameHistory',
-    'eventStandings', 'playerTotals', 'exportPlayersPng', 'exportWinnersPng',
+    'gameHistory', 'eventStandings', 'playerTotals', 'exportPlayersPng', 'exportWinnersPng', 'wipeStats',
     'playerModal', 'playerModalTitle', 'playerModalBody', 'playerModalClose',
+    'exportModal', 'exportModalClose', 'exportEventTitle', 'exportTeamNames', 'exportDoWinners', 'exportDoPlayers',
+    'dropOverlay',
     'settingsGamemode', 'addNewGamemode', 'deleteGamemode', 'pointsSettings',
     'patternTeamElim', 'patternWinner', 'patternKillPrefix', 'patternBedBreak', 'patternIndividualFinish',
     'patternKillGroup', 'patternBedBreakGroup', 'patternIndividualFinishGroup', 'myIgn',
@@ -128,7 +130,7 @@ global.Hive = {};
 
 // ---- load scripts in index.html order ----------------------------------------
 [
-    'core/ChatUtils', 'core/Toast', 'core/PosterExport', 'core/PointSystem', 'core/GameState', 'core/ScoringEngine',
+    'core/ChatUtils', 'core/Toast', 'core/FileImport', 'core/PosterExport', 'core/PointSystem', 'core/GameState', 'core/ScoringEngine',
     'parsers/GamemodeParser', 'parsers/SurvivalLastStandingParser',
     'parsers/BedWarsParser', 'parsers/SkyWarsParser', 'parsers/SurvivalGamesParser',
     'parsers/DeathRunParser', 'parsers/GravityParser', 'parsers/BlockDropParser',
@@ -175,12 +177,15 @@ check('game history rendered', /game-history-card/.test(document.getElementById(
 check('event standings rendered', /standings-team/.test(document.getElementById('eventStandings').innerHTML));
 check('player totals rendered', /player-total-chip/.test(document.getElementById('playerTotals').innerHTML));
 
+// Stats tab no longer shows the live current game / point record.
+check('current-game section removed from stats', !document.getElementById('playerStats') && !document.getElementById('pointRecord'));
+
 // Player detail modal opens with a known player.
 try {
     app.openPlayerModal('SandRosey');
     check('player modal opens', document.getElementById('playerModal').classList.contains('open') &&
         /Per-Game Breakdown/.test(document.getElementById('playerModalBody').innerHTML));
-    app.closePlayerModal();
+    app.closeModal('playerModal');
 } catch (e) { check('player modal opens', false, e.message); }
 
 // Aggregation helpers feed the PNG export.
@@ -188,7 +193,24 @@ const standings = app.statsView.playerStandingsList();
 check('player standings list non-empty', standings.length > 0 && typeof standings[0].points === 'number');
 const teamStand = app.statsView.aggregateTeamStandings();
 check('team standings list non-empty', teamStand.length > 0 && Array.isArray(teamStand[0].players));
-check('toast + poster modules present', !!global.Hive.Toast && !!global.Hive.PosterExport);
+check('toast + poster + fileimport modules present',
+    !!global.Hive.Toast && !!global.Hive.PosterExport && !!global.Hive.FileImport);
+
+// Filename -> gamemode inference.
+const known = Object.keys(app.points.pointSystems);
+check('infer BedWars from "bedwars.txt"', global.Hive.FileImport.inferGamemode('bedwars.txt', known) === 'BedWars');
+check('infer SkyWars from "skywars 1.txt"', global.Hive.FileImport.inferGamemode('skywars 1.txt', known) === 'SkyWars');
+check('infer Survival Games from "sg.txt"', global.Hive.FileImport.inferGamemode('sg.txt', known) === 'Survival Games');
+check('infer Block Party from "block party.txt"', global.Hive.FileImport.inferGamemode('block party.txt', known) === 'Block Party');
+check('no inference for "random.txt"', global.Hive.FileImport.inferGamemode('random.txt', known) === null);
+
+// Export dialog opens and lists teams to relabel.
+try {
+    app.openExportModal();
+    check('export modal opens with team rows', document.getElementById('exportModal').classList.contains('open') &&
+        /export-team-input/.test(document.getElementById('exportTeamNames').innerHTML));
+    app.closeModal('exportModal');
+} catch (e) { check('export modal opens with team rows', false, e.message); }
 
 // JSON round-trip.
 const json = JSON.parse(JSON.stringify(app.state.serialize({ saveDate: 'x' })));
@@ -197,9 +219,15 @@ app.state.applyData(json, { includeTeams: true });
 check('JSON round-trip preserves scores', JSON.stringify(app.state.scores) === before);
 
 // Undo works.
-const teamsBefore = Object.keys(app.state.teams).length;
 app.performUndo();
 check('undo executed without throw', true);
+
+// Wipe statistics clears history but keeps teams.
+const teamsBeforeWipe = Object.keys(app.state.teams).length;
+app.wipeStatistics();
+check('wipe clears game history', app.state.gameHistory.length === 0);
+check('wipe clears scores + player stats', Object.keys(app.state.scores).length === 0 && Object.keys(app.state.playerStats).length === 0);
+check('wipe keeps teams', Object.keys(app.state.teams).length === teamsBeforeWipe && teamsBeforeWipe > 0);
 
 console.log(`\nBoot smoke: ${pass} passed, ${fail} failed`);
 if (failures.length) { failures.forEach(f => console.log('  ✗ ' + f)); process.exit(1); }
