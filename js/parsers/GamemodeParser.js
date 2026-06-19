@@ -26,6 +26,7 @@
             this.state = state;
             this.engine = engine;
             this.points = points;
+            this.gameHasStarted = false;
         }
 
         get name() { return 'Base'; }
@@ -54,10 +55,21 @@
             const clean = ChatUtils.stripColorCodes(rawLine);
             if (!clean) return false;
 
+            // Offline/online — only relevant after the game has started.
+            if (/^.+?\s+has gone offline\.?$/i.test(clean)) {
+                if (this.gameHasStarted) {
+                    const name = clean.match(/^(.+?)\s+has gone offline\.?$/i)[1].trim();
+                    const team = this.state.findPlayerTeam(name);
+                    const ps = team && this.state.playerStats[name];
+                    if (team && (!ps || !ps.eliminated)) this.markEliminated(name, team);
+                }
+                return true;
+            }
+            // Swallow "has come online" — coming back doesn't undo the elimination.
+            if (/^.+?\s+has come online\.?$/i.test(clean)) return true;
+
             if (/game over!?/i.test(clean)) {
                 this.onGameOver(clean);
-                // Game-over is informational; let other detectors still run on the
-                // same line in case a winner is announced separately.
             }
             return this.detect(clean, rawLine);
         }
@@ -118,6 +130,7 @@
         recordKillPointOnly(killerName) {
             const killerTeam = this.state.findPlayerTeam(killerName);
             if (!killerTeam) return false;
+            this.gameHasStarted = true;
             const ks = this.state.getOrCreatePlayerStats(killerName, killerTeam);
             ks.kills++;
             this.engine.awardPoints(killerTeam, 'Kill');
@@ -159,6 +172,7 @@
         }
 
         markEliminated(playerName, teamName) {
+            this.gameHasStarted = true;
             const ps = this.state.getOrCreatePlayerStats(playerName, teamName);
             if (!ps.eliminated) {
                 ps.eliminated = true;
