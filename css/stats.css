@@ -1088,3 +1088,50 @@
     color: var(--hive-yellow);
     font-size: 1.1em;
 }
+/* Point Record (current-game events grouped per team) */
+.point-record-team {
+    background: var(--hive-card);
+    border: 2px solid var(--hive-border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+}
+
+.pr-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    font-weight: 700;
+}
+
+.pr-total {
+    color: var(--hive-yellow);
+}
+
+.pr-events {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+}
+
+.pr-events li {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 6px;
+    font-size: 0.92em;
+}
+
+.pr-pts {
+    color: var(--hive-gold);
+    font-weight: 700;
+}
+
+/* "My IGN" settings field */
+.local-player-group {
+    margin: 18px 0;
+}

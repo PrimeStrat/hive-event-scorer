@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -25,8 +25,8 @@
                     <p class="disclaimer">⚠️ Non-Profit Project - Not affiliated with The Hive</p>
                 </div>
                 <div class="action-buttons">
-                    <button id="saveBtn" class="btn btn-success btn-action">Save JSON</button>
-                    <button id="loadBtn" class="btn btn-primary btn-action">Load JSON</button>
+                    <button type="button" id="saveBtn" class="btn btn-success btn-action">Save JSON</button>
+                    <button type="button" id="loadBtn" class="btn btn-primary btn-action">Load JSON</button>
                     <input type="file" id="fileInput" accept=".json" class="hidden-input" aria-label="Upload JSON file">
                 </div>
             </div>
@@ -70,19 +70,7 @@
                         <label for="gamemode">Select Gamemode:</label>
                         <select id="gamemode">
                             <option value="">-- Choose a Gamemode --</option>
-                            <option value="BedWars">BedWars</option>
-                            <option value="Treasure Wars">Treasure Wars</option>
-                            <option value="SkyWars">SkyWars</option>
-                            <option value="Murder Mystery">Murder Mystery</option>
-                            <option value="DeathRun">DeathRun</option>
-                            <option value="The Bridge">The Bridge</option>
-                            <option value="Ground Wars">Ground Wars</option>
-                            <option value="Hide and Seek">Hide and Seek</option>
-                            <option value="Survival Games">Survival Games</option>
-                            <option value="BlockDrop">BlockDrop</option>
-                            <option value="Build Battle">Build Battle</option>
-                            <option value="Block Party">Block Party</option>
-                            <option value="Gravity">Gravity</option>
+                            <!-- Populated dynamically from the configured point systems. -->
                         </select>
                     </div>
                 </div>
@@ -92,7 +80,7 @@
                     <div class="section-header">
                         <h2>Chat Text Input</h2>
                         <div class="action-buttons">
-                            <button id="clearInput" class="btn btn-secondary">Clear Input</button>
+                            <button type="button" id="clearInput" class="btn btn-secondary">Clear Input</button>
                         </div>
                     </div>
 
@@ -100,8 +88,8 @@
                         placeholder="Paste chat text here...&#10;&#10;Example:&#10;Player1 killed Player2&#10;Player3 scored a goal&#10;Player1 won the game&#10;&#10;Tip: You can paste multiple lines at once!"></textarea>
 
                     <div class="input-actions">
-                        <button id="processBtn" class="btn btn-primary">Process Chat</button>
-                        <button id="processSingleLine" class="btn btn-secondary">Process Last Line</button>
+                        <button type="button" id="processBtn" class="btn btn-primary">Process Chat</button>
+                        <button type="button" id="processSingleLine" class="btn btn-secondary">Process Last Line</button>
                     </div>
                 </div>
 
@@ -110,9 +98,9 @@
                     <div class="section-header">
                         <h2>Scoreboard</h2>
                         <div class="action-buttons">
-                            <button id="undoBtn" class="btn btn-secondary" disabled>Undo</button>
-                            <button id="redoBtn" class="btn btn-secondary" disabled>Redo</button>
-                            <button id="resetScores" class="btn btn-warning">Reset Scores</button>
+                            <button type="button" id="undoBtn" class="btn btn-secondary" disabled>Undo</button>
+                            <button type="button" id="redoBtn" class="btn btn-secondary" disabled>Redo</button>
+                            <button type="button" id="resetScores" class="btn btn-warning">Reset Scores</button>
                         </div>
                     </div>
                     <div id="scoreboard" class="scoreboard">
@@ -124,7 +112,7 @@
                 <div class="section">
                     <div class="section-header">
                         <h2>Activity Log</h2>
-                        <button id="clearLog" class="btn btn-secondary">Clear Log</button>
+                        <button type="button" id="clearLog" class="btn btn-secondary">Clear Log</button>
                     </div>
                     <div id="activityLog" class="activity-log">
                         <p class="empty-state">Activity will appear here...</p>
@@ -166,7 +154,7 @@
                         </select>
                     </div>
                     <div class="create-team-button">
-                        <button id="addPlayer" class="btn btn-primary">Add Player</button>
+                        <button type="button" id="addPlayer" class="btn btn-primary">Add Player</button>
                     </div>
                 </div>
                 <div class="bulk-player-entry">
@@ -176,7 +164,7 @@
                     <div class="bulk-player-actions">
                         <p class="help-text">Use commas or one IGN per line. Existing players will be moved to the
                             selected team.</p>
-                        <button id="addBulkPlayers" class="btn btn-secondary">Add Bulk IGNs</button>
+                        <button type="button" id="addBulkPlayers" class="btn btn-secondary">Add Bulk IGNs</button>
                     </div>
                 </div>
             </div>
@@ -187,7 +175,7 @@
                     <h2>Teams</h2>
                     <div class="team-actions-bar">
                         <div class="btn-group">
-                            <button id="clearAllPlayers" class="btn btn-warning">Clear All Players</button>
+                            <button type="button" id="clearAllPlayers" class="btn btn-warning">Clear All Players</button>
                         </div>
                     </div>
                 </div>
@@ -233,6 +221,15 @@
             </div>
 
             <div class="section section-spacing">
+                <h2 class="section-title">Overall Player Leaderboard</h2>
+                <p class="help-text">Cumulative points per player across all completed games. Click a
+                    per-gamemode score to edit it - player and team totals stay in sync.</p>
+                <div id="overallStats">
+                    <p class="empty-state">No games played yet!</p>
+                </div>
+            </div>
+
+            <div class="section section-spacing">
                 <h2 class="section-title">Game History</h2>
                 <p class="help-text">All completed games with scores and player performance</p>
                 <div id="gameHistory">
@@ -266,20 +263,21 @@
                     <div class="gamemode-dropdown-container">
                         <label for="settingsGamemode">Select Gamemode to Configure:</label>
                         <select id="settingsGamemode" class="gamemode-select">
-                            <option value="DeathRun">DeathRun</option>
-                            <option value="SkyWars">SkyWars</option>
-                            <option value="BlockDrop">Block Drop</option>
-                            <option value="BedWars">BedWars</option>
-                            <option value="Block Party">Block Party</option>
-                            <option value="Gravity">Gravity</option>
-                            <option value="Survival Games">Survival Games</option>
+                            <!-- Populated dynamically from the configured point systems. -->
                         </select>
                         <span class="selector-hint">👆 Click here to choose which gamemode to edit</span>
                     </div>
                     <div class="gamemode-actions">
-                        <button id="addNewGamemode" class="btn btn-primary">+ New Gamemode</button>
-                        <button id="deleteGamemode" class="btn btn-danger">Delete Gamemode</button>
+                        <button type="button" id="addNewGamemode" class="btn btn-primary">+ New Gamemode</button>
+                        <button type="button" id="deleteGamemode" class="btn btn-danger">Delete Gamemode</button>
                     </div>
+                </div>
+
+                <div class="pattern-group local-player-group">
+                    <label for="myIgn">My IGN (the log owner):</label>
+                    <input type="text" id="myIgn" class="pattern-input" placeholder="e.g. Qv19v">
+                    <span class="pattern-help">Used to attribute first-person events like "You killed ..."
+                        or "You finished in 1st place". Leave blank to skip "You" lines.</span>
                 </div>
 
                 <div id="pointsSettings" class="points-settings">
@@ -327,10 +325,10 @@
                 </div>
 
                 <div class="settings-actions">
-                    <button id="saveSettings" class="btn btn-success">Save Settings</button>
-                    <button id="resetSettings" class="btn btn-warning">Reset to Defaults</button>
-                    <button id="exportSettings" class="btn btn-info">Export Settings</button>
-                    <button id="importSettings" class="btn btn-info">Import Settings</button>
+                    <button type="button" id="saveSettings" class="btn btn-success">Save Settings</button>
+                    <button type="button" id="resetSettings" class="btn btn-warning">Reset to Defaults</button>
+                    <button type="button" id="exportSettings" class="btn btn-info">Export Settings</button>
+                    <button type="button" id="importSettings" class="btn btn-info">Import Settings</button>
                     <input type="file" id="settingsFileInput" accept=".json" class="hidden-input"
                         aria-label="Upload settings file">
                 </div>
@@ -351,7 +349,33 @@
         </div>
     </footer>
 
-    <script src="js/main.js"></script>
+    <!-- Core (load order matters: utilities -> state -> engine) -->
+    <script src="js/core/ChatUtils.js"></script>
+    <script src="js/core/PointSystem.js"></script>
+    <script src="js/core/GameState.js"></script>
+    <script src="js/core/ScoringEngine.js"></script>
+
+    <!-- Parsers: base, shared survival base, then per-gamemode subclasses, then registry -->
+    <script src="js/parsers/GamemodeParser.js"></script>
+    <script src="js/parsers/SurvivalLastStandingParser.js"></script>
+    <script src="js/parsers/BedWarsParser.js"></script>
+    <script src="js/parsers/SkyWarsParser.js"></script>
+    <script src="js/parsers/SurvivalGamesParser.js"></script>
+    <script src="js/parsers/DeathRunParser.js"></script>
+    <script src="js/parsers/GravityParser.js"></script>
+    <script src="js/parsers/BlockDropParser.js"></script>
+    <script src="js/parsers/BlockPartyParser.js"></script>
+    <script src="js/parsers/index.js"></script>
+
+    <!-- Renderers -->
+    <script src="js/renderers/Renderer.js"></script>
+    <script src="js/renderers/ScoreboardRenderer.js"></script>
+    <script src="js/renderers/TeamsRenderer.js"></script>
+    <script src="js/renderers/StatsRenderer.js"></script>
+    <script src="js/renderers/SettingsRenderer.js"></script>
+
+    <!-- App controller (boots on DOMContentLoaded) -->
+    <script src="js/app.js"></script>
 </body>
 
 </html>
