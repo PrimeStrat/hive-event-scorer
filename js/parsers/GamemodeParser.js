@@ -81,6 +81,12 @@
 
         onGameOver(/* clean */) {
             this.state.currentGameCompleted = true;
+            // Individual-survival modes (Block Drop / Block Party, plus PvP modes
+            // BedWars / SkyWars / Survival Games): rank every player by when they were
+            // eliminated and score each from their OWN placement.
+            if (this.features.individualSurvival) this.engine.finalizePlayerPlacements();
+            // Team-placement modes: close out from survival (last team standing wins).
+            else if (this.features.teamElimination) this.engine.finalizeFromSurvival();
         }
 
         // ---- shared detectors --------------------------------------------
@@ -127,8 +133,22 @@
             return false;
         }
 
+        /**
+         * Resolve the team a player belongs to. If they aren't on any team and the
+         * "auto-add unknown players" setting is on, drop them into the catch-all UNKNOWN
+         * team so their events still score. Returns null when unresolved and the setting
+         * is off. Only call this with names captured by high-confidence detectors (kills,
+         * bed breaks, placement lines) — never raw text — to avoid inventing players.
+         */
+        resolvePlayerTeam(playerName) {
+            const team = this.state.findPlayerTeam(playerName);
+            if (team) return team;
+            if (this.points.autoAddUnknownPlayers === false) return null;
+            return this.state.addUnknownPlayer(playerName);
+        }
+
         recordKillPointOnly(killerName) {
-            const killerTeam = this.state.findPlayerTeam(killerName);
+            const killerTeam = this.resolvePlayerTeam(killerName);
             if (!killerTeam) return false;
             this.gameHasStarted = true;
             const ks = this.state.getOrCreatePlayerStats(killerName, killerTeam);
@@ -142,8 +162,8 @@
         }
 
         recordKill(killerName, victimName) {
-            const killerTeam = this.state.findPlayerTeam(killerName);
-            const victimTeam = this.state.findPlayerTeam(victimName);
+            const killerTeam = this.resolvePlayerTeam(killerName);
+            const victimTeam = this.resolvePlayerTeam(victimName);
             if (killerTeam) {
                 const ks = this.state.getOrCreatePlayerStats(killerName, killerTeam);
                 ks.kills++;
@@ -162,7 +182,7 @@
         }
 
         recordDeath(victimName) {
-            const team = this.state.findPlayerTeam(victimName);
+            const team = this.resolvePlayerTeam(victimName);
             if (!team) return false;
             const vs = this.state.getOrCreatePlayerStats(victimName, team);
             vs.deaths++;
@@ -228,13 +248,10 @@
             // the inferred team has players actually eliminated (vs. 0 = genuine dup).
             if (this.state.eliminationOrder.includes(teamName)) {
                 const inferred = this._inferEliminatedTeam();
-                if (!inferred) return true; // all teams resolved, genuine duplicate
-                const inf = this.state.teams[inferred];
-                const infElim = inf ? (inf.players || []).filter(p => {
-                    const ps = this.state.playerStats[p];
-                    return ps && ps.eliminated;
-                }).length : 0;
-                if (infElim === 0) return true; // no players eliminated on unresolved teams, genuine dup
+                // Only reassign to another team if that team is genuinely, FULLY knocked
+                // out. A partially-alive team (e.g. the eventual champion) must never be
+                // pulled in by Hive's duplicate no-prefix elimination broadcast.
+                if (!inferred || !this.engine.isTeamFullyEliminated(inferred)) return true;
                 teamName = inferred;
             }
 
@@ -244,8 +261,13 @@
                 for (const p of team.players) this.markEliminated(p, teamName);
             }
             this.state.addLog(`${teamName} eliminated (${this.state.eliminationOrder.length} out)`, 'warning');
-            this.engine.recordTeamEliminationPlacement(teamName);
-            this.engine.tryFinalize();
+            // Individual-survival modes score per player from the elimination order, so a
+            // team being wiped only marks its players out - placement is finalised at game
+            // over. Team-placement modes record the team's placement here.
+            if (!this.features.individualSurvival) {
+                this.engine.recordTeamEliminationPlacement(teamName);
+                this.engine.tryFinalize();
+            }
             return true;
         }
 
@@ -290,10 +312,16 @@
                 else if (active.length === 0) teamName = null; // already finalized
             }
             if (!teamName) return false;
+            this.state.addLog(`${teamName} WON!`, 'success');
+            // Individual-survival modes: the winning team's players are the survivors;
+            // they take the top placements when we rank everyone by elimination order.
+            if (this.features.individualSurvival) {
+                this.engine.finalizePlayerPlacements();
+                return true;
+            }
             if (!this.engine.hasPlacement(teamName, '1st place')) {
                 this.engine.awardPoints(teamName, '1st place');
             }
-            this.state.addLog(`${teamName} WON!`, 'success');
             this.engine.finalizeGamePlacements(teamName);
             return true;
         }
@@ -348,7 +376,7 @@
         }
 
         recordIndividualPlacement(playerName, position) {
-            const team = this.state.findPlayerTeam(playerName);
+            const team = this.resolvePlayerTeam(playerName);
             if (!team) return false;
             const ps = this.state.getOrCreatePlayerStats(playerName, team);
             ps.placement = ChatUtils.ordinal(position);
@@ -370,6 +398,7 @@
         }
 
         trackTeamFinish(teamName, playerName) {
+            if (!this.engine.isScorableTeam(teamName)) return; // UNKNOWN can't claim the team-finish bonus
             if (!this.state.playersFinished[teamName]) this.state.playersFinished[teamName] = [];
             if (!this.state.playersFinished[teamName].includes(playerName)) {
                 this.state.playersFinished[teamName].push(playerName);

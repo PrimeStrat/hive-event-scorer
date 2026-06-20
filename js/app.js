@@ -312,6 +312,7 @@
             const pn = document.getElementById('playerName'); if (pn) pn.value = '';
             if (bulk) { const bp = document.getElementById('bulkPlayerNames'); if (bp) bp.value = ''; }
 
+            this.resyncScores();
             this.state.addLog(`Added ${toAdd.length} player(s) to ${teamName}`, 'info');
             this.state.saveTeams(); this.state.syncToStorage();
             this.teamsView.render(); this.updateUI();
@@ -333,6 +334,7 @@
             const i = this.state.teams[teamName].players.indexOf(playerName);
             if (i > -1) this.state.teams[teamName].players.splice(i, 1);
             if (this.state.teams[teamName].players.length === 0) delete this.state.teams[teamName];
+            this.resyncScores();
             this.state.saveTeams(); this.state.syncToStorage();
             this.teamsView.render(); this.updateUI();
         }
@@ -343,9 +345,19 @@
             this.state.ensureTeam(newTeam);
             if (!this.state.teams[newTeam].players.includes(playerName)) this.state.teams[newTeam].players.push(playerName);
             if (this.state.playerStats[playerName]) this.state.playerStats[playerName].team = newTeam;
+            this.resyncScores();
             this.state.saveTeams(); this.state.syncToStorage();
             this.teamsView.render(); this.updateUI();
             this.state.addLog(`${playerName} moved from ${oldTeam} to ${newTeam}`, 'info');
+        }
+
+        /**
+         * Rebuild the current game's team scores from the per-player records so points
+         * follow players after a roster change (e.g. moving someone off the UNKNOWN team).
+         * No-op when there's no active game.
+         */
+        resyncScores() {
+            if (this.state.hasActiveScores()) this.engine.recomputeScores();
         }
 
         clearAllPlayers() {

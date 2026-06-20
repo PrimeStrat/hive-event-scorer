@@ -40,6 +40,8 @@
             set('patternIndividualFinish', p.individualFinish);
             const ign = this.$('myIgn');
             if (ign) ign.value = this.points.myIgn || '';
+            const autoAdd = this.$('autoAddUnknownPlayers');
+            if (autoAdd) autoAdd.checked = this.points.autoAddUnknownPlayers !== false;
             this.updatePatternVisibility();
         }
 
@@ -70,6 +72,8 @@
             };
             const ign = this.$('myIgn');
             if (ign) this.points.myIgn = ign.value.trim();
+            const autoAdd = this.$('autoAddUnknownPlayers');
+            if (autoAdd) this.points.autoAddUnknownPlayers = autoAdd.checked;
         }
 
         renderAll() {

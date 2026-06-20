@@ -19,13 +19,34 @@
 
         detect(clean) {
             if (this.detectFinalKill(clean)) return true;
+            if (this.detectLocalElimination(clean)) return true;
             if (this.detectFirstPersonKill(clean)) return true;
             if (this.detectBedBreak(clean)) return true;
             if (this.detectWinner(clean)) return true;
             if (this.detectTeamElimination(clean)) return true;
-            // Generic kill last (covers any future flavour kill text).
-            if (this.detectGenericKill(clean)) return true;
+            // NOTE: no generic flavour-kill fallback here. In BedWars a kill only scores
+            // (and only knocks a player out) once their bed is gone - the game marks
+            // exactly those kills as "FINAL KILL!". Regular kills respawn the victim and
+            // must never award a point, so anything that isn't a FINAL KILL is ignored.
             return false;
+        }
+
+        /**
+         * "You have been eliminated from the game! [No bed]" - the local player's own
+         * final elimination (no killer is credited). Marks them out so their team can
+         * be counted as fully knocked out.
+         */
+        detectLocalElimination(clean) {
+            if (!/You have been\s+eliminated\s+from the game/i.test(clean)) return false;
+            const me = this.resolvePlayerName('You');
+            if (me) {
+                const team = this.resolvePlayerTeam(me);
+                if (team) {
+                    this.state.getOrCreatePlayerStats(me, team).deaths++;
+                    this.markEliminated(me, team);
+                }
+            }
+            return true;
         }
 
         detectFinalKill(clean) {
@@ -34,8 +55,8 @@
             if (!m) return false;
             const killer = m[1].trim();
             const victim = m[2].trim();
-            const killerTeam = this.state.findPlayerTeam(killer);
-            const victimTeam = this.state.findPlayerTeam(victim);
+            const killerTeam = this.resolvePlayerTeam(killer);
+            const victimTeam = this.resolvePlayerTeam(victim);
             if (killerTeam) {
                 const ks = this.state.getOrCreatePlayerStats(killer, killerTeam);
                 ks.kills++; ks.finalKills++;
@@ -60,7 +81,7 @@
             let m = clean.match(/»?\s*You killed\s+(.+?)\s*$/i);
             if (m) {
                 const victim = m[1].trim();
-                const victimTeam = this.state.findPlayerTeam(victim);
+                const victimTeam = this.resolvePlayerTeam(victim);
                 if (victimTeam) {
                     this.state.getOrCreatePlayerStats(victim, victimTeam).deaths++;
                 }
@@ -71,7 +92,7 @@
             if (m) {
                 const victim = this.resolvePlayerName('You');
                 if (!victim) return false;
-                const victimTeam = this.state.findPlayerTeam(victim);
+                const victimTeam = this.resolvePlayerTeam(victim);
                 if (victimTeam) this.state.getOrCreatePlayerStats(victim, victimTeam).deaths++;
                 return true;
             }
@@ -89,7 +110,7 @@
             }
             if (!breaker) return false;
 
-            const team = this.state.findPlayerTeam(breaker);
+            const team = this.resolvePlayerTeam(breaker);
             if (!team) return false;
             const ps = this.state.getOrCreatePlayerStats(breaker, team);
             ps.bedBreaks++;

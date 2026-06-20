@@ -40,25 +40,50 @@
          */
         aggregatePlayerScores() {
             const result = {};
+            const add = (name, gamemode, pts) => {
+                if (!result[name]) result[name] = { totalPoints: 0, byGamemode: {} };
+                result[name].totalPoints += pts;
+                result[name].byGamemode[gamemode] = (result[name].byGamemode[gamemode] || 0) + pts;
+            };
+
             for (const game of this.state.gameHistory) {
+                const features = this.points.featuresFor(game.gamemode) || {};
+                // In individual-placement modes each player earns their OWN placement
+                // points (they stack on the team), so attribute them directly. In
+                // team-placement modes (SkyWars / BedWars / Survival Games) the 1st/2nd/3rd
+                // points belong to the whole team, so the total is split across players.
+                const individual = !!(features.individualFinish || features.individualSurvival);
+
                 for (const [teamName, teamScore] of Object.entries(game.scores)) {
+                    if (teamName === 'UNKNOWN') continue; // holding bucket, never scores
                     const team = this.state.teams[teamName];
                     if (!team || !team.players) continue;
                     const players = team.players.filter(p => game.playerStats[p]);
                     if (players.length === 0) continue;
 
-                    const base = Math.floor(teamScore.score / players.length);
-                    let remainder = teamScore.score - base * players.length;
-                    const ranked = players.slice().sort((a, b) =>
-                        this.engine.gamePlayerContribution(game, b, game.playerStats[b]) -
-                        this.engine.gamePlayerContribution(game, a, game.playerStats[a]));
+                    const contrib = name => this.engine.gamePlayerContribution(game, name, game.playerStats[name]);
+                    const ranked = players.slice().sort((a, b) => contrib(b) - contrib(a));
 
-                    for (const name of ranked) {
-                        let pts = base;
-                        if (remainder > 0) { pts += 1; remainder--; }
-                        if (!result[name]) result[name] = { totalPoints: 0, byGamemode: {} };
-                        result[name].totalPoints += pts;
-                        result[name].byGamemode[game.gamemode] = (result[name].byGamemode[game.gamemode] || 0) + pts;
+                    if (individual) {
+                        // Each player keeps what they personally scored; any team-level
+                        // bonus (first full team finish / last team standing) is the
+                        // leftover and is credited to the team's top earner so the player
+                        // totals still reconcile with the team total.
+                        const sum = players.reduce((acc, n) => acc + contrib(n), 0);
+                        let leftover = teamScore.score - sum;
+                        for (const name of ranked) {
+                            let pts = contrib(name);
+                            if (leftover > 0) { pts += leftover; leftover = 0; }
+                            add(name, game.gamemode, pts);
+                        }
+                    } else {
+                        const base = Math.floor(teamScore.score / players.length);
+                        let remainder = teamScore.score - base * players.length;
+                        for (const name of ranked) {
+                            let pts = base;
+                            if (remainder > 0) { pts += 1; remainder--; }
+                            add(name, game.gamemode, pts);
+                        }
                     }
                 }
             }
@@ -74,7 +99,7 @@
             const teams = {};
             for (const game of this.state.gameHistory) {
                 for (const [teamName, teamScore] of Object.entries(game.scores)) {
-                    if (!this.state.teams[teamName]) continue;
+                    if (teamName === 'UNKNOWN' || !this.state.teams[teamName]) continue;
                     teams[teamName] = (teams[teamName] || 0) + teamScore.score;
                 }
             }
@@ -91,7 +116,10 @@
         playerStandingsList() {
             const scores = this.aggregatePlayerScores();
             return Object.entries(scores)
-                .filter(([name]) => this.state.findPlayerTeam(name))
+                .filter(([name]) => {
+                    const t = this.state.findPlayerTeam(name);
+                    return t && t !== 'UNKNOWN'; // exclude unrostered / holding-bucket players
+                })
                 .map(([name, data]) => {
                     const team = this.state.findPlayerTeam(name);
                     return { name, team, teamColor: this.teamColor(team), points: data.totalPoints, byGamemode: data.byGamemode };
@@ -202,8 +230,16 @@
             const end = new Date(game.endTime);
             const duration = isFinite(end) ? Math.round((end - start) / 60000) : 0;
             const editing = String(this.state.editingGameId) === String(game.id);
-            const teams = Object.entries(game.scores).sort((a, b) => b[1].score - a[1].score);
-            const winner = teams[0];
+            const teams = Object.entries(game.scores)
+                .filter(([t]) => t !== 'UNKNOWN') // holding bucket, not a competitor
+                .sort((a, b) => b[1].score - a[1].score);
+            // Standard competition ranking: equal scores share a rank (1, 2, 2, 4).
+            const ranks = [];
+            teams.forEach(([, data], i) => {
+                ranks[i] = (i > 0 && data.score === teams[i - 1][1].score) ? ranks[i - 1] : i + 1;
+            });
+            const topScore = teams.length ? teams[0][1].score : null;
+            const winners = teams.filter(([, d]) => d.score === topScore);
             const features = this.points.featuresFor(game.gamemode) || {};
             const showCombat = !!features.kills, showBeds = !!features.bedBreaks;
 
@@ -215,7 +251,7 @@
                     </div>
                     <div class="game-info">
                         <span>Duration: ${duration} min</span>
-                        <span>Winner: ${winner ? this.escapeHtml(winner[0]) + ' (' + winner[1].score + ' pts)' : '-'}</span>
+                        <span>${winners.length > 1 ? 'Tied' : 'Winner'}: ${winners.length ? winners.map(([t]) => this.escapeHtml(t)).join(', ') + ' (' + topScore + ' pts)' : '-'}</span>
                     </div>
                     <div class="game-scores">
                         <div class="game-scores-header">
@@ -232,7 +268,7 @@
                             const color = this.teamColor(teamName);
                             return `
                                 <div class="score-row" style="border-left: 3px solid ${color}">
-                                    <span class="rank">#${i + 1}</span>
+                                    <span class="rank">#${ranks[i]}</span>
                                     <span class="team-name">${this.escapeHtml(teamName)}</span>
                                     ${editing
                                         ? `<input type="number" class="score-editor-input" data-team="${this.escapeHtml(teamName)}" value="${data.score}" min="0" />`
@@ -243,7 +279,7 @@
                     <div class="game-player-stats">
                         <h4>Player Performance</h4>
                         <div class="player-stats-grid">
-                            ${Object.entries(game.playerStats).map(([name, data]) => {
+                            ${Object.entries(game.playerStats).filter(([, data]) => data.team !== 'UNKNOWN').map(([name, data]) => {
                                 const color = this.teamColor(data.team);
                                 const c = this.engine.gamePlayerContribution(game, name, data);
                                 return `

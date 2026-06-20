@@ -24,14 +24,16 @@
         return {
             // kills: combat kills score; bedBreaks: bed-break events score;
             // individualFinish: per-player placement lines; teamFinish: full-team-finish bonus;
-            // individualSurvival: last-player-standing placement from elimination order.
-            'DeathRun': { kills: false, bedBreaks: false, individualFinish: true, teamFinish: true, individualSurvival: false },
-            'SkyWars': { kills: true, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: false },
-            'Survival Games': { kills: true, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: false },
-            'BedWars': { kills: true, bedBreaks: true, individualFinish: false, teamFinish: false, individualSurvival: false },
-            'Gravity': { kills: false, bedBreaks: false, individualFinish: true, teamFinish: true, individualSurvival: false },
-            'BlockDrop': { kills: false, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: true },
-            'Block Party': { kills: false, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: true }
+            // individualSurvival: last-player-standing placement from elimination order;
+            // teamElimination: team placement (1st/2nd/3rd) is decided by the order teams are
+            //   knocked out - i.e. when every player on a team has been killed - not by points.
+            'DeathRun': { kills: false, bedBreaks: false, individualFinish: true, teamFinish: true, individualSurvival: false, teamElimination: false },
+            'SkyWars': { kills: true, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: true, teamElimination: false },
+            'Survival Games': { kills: true, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: true, teamElimination: false },
+            'BedWars': { kills: true, bedBreaks: true, individualFinish: false, teamFinish: false, individualSurvival: true, teamElimination: false },
+            'Gravity': { kills: false, bedBreaks: false, individualFinish: true, teamFinish: true, individualSurvival: false, teamElimination: false },
+            'BlockDrop': { kills: false, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: true, teamElimination: false },
+            'Block Party': { kills: false, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: true, teamElimination: false }
         };
     }
 
@@ -53,6 +55,9 @@
             this.gamemodeFeatures = defaultFeatures();
             this.detectionPatterns = defaultDetectionPatterns();
             this.myIgn = '';
+            // When a player appears in the logs but isn't on any team, add them to an
+            // "UNKNOWN" team so their events still score. Toggleable in Settings.
+            this.autoAddUnknownPlayers = true;
             this.STORAGE_KEY = 'hive_settings';
         }
 
@@ -67,9 +72,10 @@
                 if (!raw) return;
                 const settings = JSON.parse(raw);
                 if (settings.pointSystems) this.pointSystems = settings.pointSystems;
-                if (settings.gamemodeFeatures) this.gamemodeFeatures = settings.gamemodeFeatures;
+                this.gamemodeFeatures = PointSystem._mergeFeatures(settings.gamemodeFeatures);
                 if (settings.detectionPatterns) this.detectionPatterns = settings.detectionPatterns;
                 if (typeof settings.myIgn === 'string') this.myIgn = settings.myIgn;
+                if (typeof settings.autoAddUnknownPlayers === 'boolean') this.autoAddUnknownPlayers = settings.autoAddUnknownPlayers;
             } catch (err) {
                 console.error('Error loading settings:', err);
                 this.reset();
@@ -81,7 +87,8 @@
                 pointSystems: this.pointSystems,
                 gamemodeFeatures: this.gamemodeFeatures,
                 detectionPatterns: this.detectionPatterns,
-                myIgn: this.myIgn
+                myIgn: this.myIgn,
+                autoAddUnknownPlayers: this.autoAddUnknownPlayers
             };
             if (typeof localStorage !== 'undefined') {
                 localStorage.setItem(this.STORAGE_KEY, JSON.stringify(settings));
@@ -93,15 +100,27 @@
             this.pointSystems = defaultPointSystems();
             this.gamemodeFeatures = defaultFeatures();
             this.detectionPatterns = defaultDetectionPatterns();
+            this.autoAddUnknownPlayers = true;
             this.save();
         }
 
         importSettings(settings) {
             if (settings.pointSystems) this.pointSystems = settings.pointSystems;
-            if (settings.gamemodeFeatures) this.gamemodeFeatures = settings.gamemodeFeatures;
+            this.gamemodeFeatures = PointSystem._mergeFeatures(settings.gamemodeFeatures);
             if (settings.detectionPatterns) this.detectionPatterns = settings.detectionPatterns;
             if (typeof settings.myIgn === 'string') this.myIgn = settings.myIgn;
+            if (typeof settings.autoAddUnknownPlayers === 'boolean') this.autoAddUnknownPlayers = settings.autoAddUnknownPlayers;
             this.save();
+        }
+
+        /**
+         * Gamemode feature flags are scoring LOGIC, not user-editable preferences, so the
+         * current code defaults must always win - otherwise a stale localStorage copy would
+         * pin the scoring model to an old version. We keep persisted entries only for custom
+         * gamemodes the defaults don't know about.
+         */
+        static _mergeFeatures(saved) {
+            return Object.assign({}, saved || {}, defaultFeatures());
         }
 
         exportSettings() {
@@ -109,7 +128,8 @@
                 pointSystems: this.pointSystems,
                 gamemodeFeatures: this.gamemodeFeatures,
                 detectionPatterns: this.detectionPatterns,
-                myIgn: this.myIgn
+                myIgn: this.myIgn,
+                autoAddUnknownPlayers: this.autoAddUnknownPlayers
             };
         }
 
