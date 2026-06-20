@@ -54,15 +54,3 @@ js/
   app.js              Controller: wires the DOM to the engine and renderers
 tests/                Node harnesses (no dependencies)
 ```
-
-### Tests
-Run with Node (no install needed):
-```
-node tests/run-logs.mjs    # parses the real Hive logs and asserts per-mode outcomes
-node tests/boot-smoke.mjs  # boots the full app against a DOM shim and checks wiring
-```
-The log harness reads from `HIVE_LOGS` (defaults to the sample log folder); override it to point at your own logs.
-
-### Feature Requests
-Submit feature requests and bug reports through GitHub Issues.
-
