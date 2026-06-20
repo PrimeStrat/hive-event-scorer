@@ -221,7 +221,7 @@ textarea { resize: vertical; min-height: 90px; }
 .bulk-player-entry { margin-top: 18px; }
 .bulk-player-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
 
-.teams-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--gap); }
+.teams-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--gap); }
 .teams-empty-state { grid-column: 1 / -1; text-align: center; color: var(--text-muted); padding: 30px; }
 .team-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
 .team-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
@@ -231,8 +231,9 @@ textarea { resize: vertical; min-height: 90px; }
 .player-list { display: grid; gap: 6px; }
 .player-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; background: var(--surface); border-radius: var(--radius-sm); padding: 6px 10px; }
 .player-item-left { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
-.player-item-left .player-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; min-width: 0; }
-.change-team-select { width: auto; padding: 3px 6px; font-size: 0.78rem; flex-shrink: 0; }
+/* Player names are capped at 15 chars, so reserve a fixed column for them and let the team select take the rest. */
+.player-item-left .player-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 0 auto; width: 15ch; }
+.change-team-select { padding: 3px 6px; font-size: 0.78rem; flex: 1 1 auto; min-width: 0; }
 .no-players { color: var(--text-muted); font-style: italic; font-size: 0.85rem; }
 .remove-player-btn {
     background: transparent; border: 1px solid var(--danger); color: var(--danger);
@@ -335,6 +336,8 @@ textarea { resize: vertical; min-height: 90px; }
 .detection-patterns-section { border-top: 1px solid var(--border); padding-top: 18px; margin-top: 8px; }
 .pattern-group { margin-bottom: 14px; }
 .pattern-help { display: block; color: var(--text-muted); font-size: 0.78rem; margin-top: 4px; }
+.checkbox-label { display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 0; }
+.checkbox-label input[type="checkbox"] { width: auto; margin: 0; flex-shrink: 0; accent-color: var(--hive-purple); cursor: pointer; }
 
 /* ---------- modal (player detail / game detail) ---------- */
 .modal { position: fixed; inset: 0; background: rgba(8, 6, 16, .72); display: none; align-items: center; justify-content: center; padding: 24px; z-index: 1000; }

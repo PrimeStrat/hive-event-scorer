@@ -21,7 +21,9 @@
         'PURPLE': { color: '#AA00AA', colorCode: '5' },
         'GREEN': { color: '#00AA00', colorCode: '2' },
         'DARK GRAY': { color: '#555555', colorCode: '8' },
-        'CYAN': { color: '#00AAAA', colorCode: '3' }
+        'CYAN': { color: '#00AAAA', colorCode: '3' },
+        // Catch-all bucket for players found in logs who weren't assigned to a team.
+        'UNKNOWN': { color: '#9CA3AF', colorCode: '7' }
     };
 
     const clone = (v) => JSON.parse(JSON.stringify(v));
@@ -72,6 +74,22 @@
                 if (data.players) names.push(...data.players);
             }
             return names;
+        }
+
+        /**
+         * Add a player discovered in the logs but not assigned to any team to the
+         * catch-all "UNKNOWN" team, creating that team if needed. Returns the team name.
+         */
+        addUnknownPlayer(playerName) {
+            if (!playerName) return null;
+            const teamName = 'UNKNOWN';
+            const team = this.ensureTeam(teamName);
+            if (!team.players.includes(playerName)) {
+                team.players.push(playerName);
+                this.addLog(`Added unknown player ${playerName} to ${teamName} team`, 'warning');
+            }
+            this.ensureScore(teamName);
+            return teamName;
         }
 
         ensureTeam(teamName) {

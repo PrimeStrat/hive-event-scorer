@@ -47,17 +47,10 @@
         }
 
         onGameOver(clean) {
+            // Base ranks every player by elimination order and scores each from their
+            // own placement (Survival Games is now individual-survival, like a battle royale).
             super.onGameOver(clean);
-            const active = this.engine.getActiveTeams();
-            if (active.length > 0) {
-                // Award winner to the active team with the most kills; break ties alphabetically.
-                const winner = active.slice().sort((a, b) => {
-                    const ka = this.state.scores[a]?.kills?.length || 0;
-                    const kb = this.state.scores[b]?.kills?.length || 0;
-                    return kb - ka || a.localeCompare(b);
-                })[0];
-                this.engine.finalizeGamePlacements(winner);
-            }
+            this.state.addLog('Survival Games game over', 'info');
         }
 
         /**
@@ -84,8 +77,12 @@
             }
             this.state.eliminationOrder.push(candidate);
             this.state.addLog(`${candidate} eliminated (${this.state.eliminationOrder.length} out)`, 'warning');
-            this.engine.recordTeamEliminationPlacement(candidate);
-            this.engine.tryFinalize();
+            // Individual-survival scoring: a wiped district only marks its players out;
+            // each player's placement is finalised per-player at game over.
+            if (!this.features.individualSurvival) {
+                this.engine.recordTeamEliminationPlacement(candidate);
+                this.engine.tryFinalize();
+            }
             return true;
         }
     }

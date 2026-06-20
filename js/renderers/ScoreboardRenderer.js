@@ -8,12 +8,14 @@
 
     class ScoreboardRenderer extends Base {
         renderQuickStats() {
-            const teamCount = Object.keys(this.state.teams).length;
+            // The UNKNOWN bucket isn't a real team, so it's excluded from the team count.
+            const teamCount = Object.keys(this.state.teams).filter(t => t !== 'UNKNOWN').length;
             const playerCount = this.loggedPlayerCount();
 
             let placements = '-';
             if (this.state.hasActiveScores()) {
                 const sorted = Object.entries(this.state.scores)
+                    .filter(([t]) => t !== 'UNKNOWN') // holding bucket, not a competitor
                     .sort((a, b) => b[1].score - a[1].score)
                     .filter(([, d]) => d.score > 0);
                 if (sorted.length) {
@@ -42,7 +44,13 @@
                 board.innerHTML = '<p class="empty-state">No scores yet. Select a gamemode and process some chat text to begin!</p>';
                 return;
             }
-            const sorted = Object.entries(this.state.scores).sort((a, b) => b[1].score - a[1].score);
+            const sorted = Object.entries(this.state.scores)
+                .filter(([t]) => t !== 'UNKNOWN') // holding bucket, not a competitor
+                .sort((a, b) => b[1].score - a[1].score);
+            if (!sorted.length) {
+                board.innerHTML = '<p class="empty-state">No team scores yet.</p>';
+                return;
+            }
             board.innerHTML = sorted.map(([teamName, data], i) => {
                 const info = this.state.teams[teamName] || { color: '#FFFFFF' };
                 const count = info.players ? info.players.length : 0;
