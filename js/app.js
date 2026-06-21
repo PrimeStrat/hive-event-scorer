@@ -203,6 +203,13 @@
             this.on('addNewGamemode', 'click', () => this.addNewGamemode());
             this.on('deleteGamemode', 'click', () => this.deleteGamemode());
             this.on('saveSettings', 'click', () => this.saveSettings());
+            // Apply + persist the auto-add toggle immediately so turning it off takes
+            // effect right away, without waiting for a separate "Save Settings" click.
+            this.on('autoAddUnknownPlayers', 'change', e => {
+                this.points.autoAddUnknownPlayers = e.target.checked;
+                this.points.save();
+                this.state.addLog(`Auto-add unknown players ${e.target.checked ? 'enabled' : 'disabled'}`, 'info');
+            });
             this.on('resetSettings', 'click', () => {
                 if (confirm('Reset all settings to defaults? This cannot be undone.')) {
                     this.points.reset(); this.updateGamemodeDropdowns(); this.settingsView.renderAll();

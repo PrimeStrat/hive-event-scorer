@@ -142,7 +142,12 @@
          */
         resolvePlayerTeam(playerName) {
             const team = this.state.findPlayerTeam(playerName);
-            if (team) return team;
+            // A real, manually-assigned team always wins.
+            if (team && team !== 'UNKNOWN') return team;
+            // Otherwise the player is unrostered (or only sitting in the UNKNOWN holding
+            // bucket). With auto-add OFF we ignore them entirely so scoring relies solely on
+            // players recorded on real teams - including any left over on UNKNOWN from a
+            // previous run while the setting was on.
             if (this.points.autoAddUnknownPlayers === false) return null;
             return this.state.addUnknownPlayer(playerName);
         }
