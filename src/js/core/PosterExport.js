@@ -17,17 +17,27 @@
     };
 
     /**
-     * Download a canvas as a PNG file.
+     * Save a canvas as a PNG: native save dialog on desktop, download otherwise.
      * @param {HTMLCanvasElement} canvas Canvas to save.
-     * @param {string} filename Download name.
+     * @param {string} filename Suggested file name.
      * @returns {void}
      */
     function dl(canvas, filename) {
-        canvas.toBlob(blob => {
+        canvas.toBlob(async blob => {
+            const bridge = (typeof window !== 'undefined') && window.hiveDesktop;
+            const Toast = global.Hive && global.Hive.Toast;
+            if (bridge && bridge.saveImage) {
+                const bytes = new Uint8Array(await blob.arrayBuffer());
+                const res = await bridge.saveImage(filename, bytes);
+                if (Toast && res.ok) Toast.show(`Saved to ${res.path}`, { title: 'Exported', duration: 6000 });
+                else if (Toast && !res.canceled) Toast.show('Could not save the image.', { title: 'Export failed', type: 'warning' });
+                return;
+            }
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url; a.download = filename; a.click();
             URL.revokeObjectURL(url);
+            if (Toast) Toast.show('Poster downloaded.', { title: 'Exported', duration: 3500 });
         }, 'image/png');
     }
 

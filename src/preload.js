@@ -34,6 +34,52 @@ contextBridge.exposeInMainWorld('hiveDesktop', {
         ipcRenderer.on('live-lines', (event, lines) => handler(lines));
     },
 
+    storage: {
+        /**
+         * Read a stored value from the app data folder (synchronous).
+         * @param {string} key Storage key.
+         * @returns {string|null} Stored string or null.
+         */
+        getItem: key => ipcRenderer.sendSync('storage-get', key),
+
+        /**
+         * Write a value to the app data folder (synchronous).
+         * @param {string} key Storage key.
+         * @param {string} value Value to store.
+         * @returns {void}
+         */
+        setItem: (key, value) => { ipcRenderer.sendSync('storage-set', key, value); },
+
+        /**
+         * Remove a stored value (synchronous).
+         * @param {string} key Storage key.
+         * @returns {void}
+         */
+        removeItem: key => { ipcRenderer.sendSync('storage-remove', key); }
+    },
+
+    /**
+     * Write a JSON text file into the app data saves folder.
+     * @param {string} filename File name.
+     * @param {string} text File content.
+     * @returns {Promise<{ok: boolean, path: string}>} Result with the saved path.
+     */
+    saveJson: (filename, text) => ipcRenderer.invoke('save-json', filename, text),
+
+    /**
+     * Save PNG bytes via a native save dialog.
+     * @param {string} filename Suggested file name.
+     * @param {Uint8Array} bytes PNG data.
+     * @returns {Promise<{ok: boolean, path: string, canceled: boolean}>} Result.
+     */
+    saveImage: (filename, bytes) => ipcRenderer.invoke('save-image', filename, bytes),
+
+    /**
+     * Open the app data folder in the file explorer.
+     * @returns {Promise<{ok: boolean}>} Result.
+     */
+    openDataFolder: () => ipcRenderer.invoke('open-data-folder'),
+
     presets: {
         /**
          * List available presets (user presets shadow bundled ones by name).

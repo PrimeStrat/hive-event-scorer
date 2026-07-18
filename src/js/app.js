@@ -46,7 +46,7 @@
         async applyDefaultPreset() {
             const bridge = global.hiveDesktop;
             if (!bridge || !bridge.presets) return;
-            if (typeof localStorage !== 'undefined' && localStorage.getItem(this.points.STORAGE_KEY)) return;
+            if (H.Storage.getItem(this.points.STORAGE_KEY)) return;
             const settings = await bridge.presets.read('HiveSilly');
             if (!settings) return;
             this.points.importSettings(settings);
@@ -894,7 +894,6 @@
                 H.PosterExport.playerStandings(players, title);
                 this.state.addLog('Exported player standings PNG', 'success');
             }
-            H.Toast.show('Poster downloaded.', { title: 'Exported', duration: 3500 });
         }
 
         /**
@@ -1035,13 +1034,26 @@
         }
 
         /**
-         * Download an object as a pretty-printed JSON file.
-         * @param {string} filename Download name.
+         * Save an object as pretty-printed JSON: into the app data saves folder on
+         * desktop, or as a browser download otherwise.
+         * @param {string} filename File name.
          * @param {Object} obj Data to save.
          * @returns {void}
          */
         download(filename, obj) {
-            const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+            const text = JSON.stringify(obj, null, 2);
+            const bridge = global.hiveDesktop;
+            if (bridge && bridge.saveJson) {
+                bridge.saveJson(filename, text).then(res => {
+                    if (res.ok) {
+                        H.Toast.show(`Saved to ${res.path}`, { title: 'Saved', duration: 6000 });
+                    } else {
+                        H.Toast.show('Could not write the save file.', { title: 'Save failed', type: 'warning' });
+                    }
+                });
+                return;
+            }
+            const blob = new Blob([text], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url; a.download = filename; a.click();

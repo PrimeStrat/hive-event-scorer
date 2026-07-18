@@ -3,11 +3,37 @@
  */
 'use strict';
 
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
 const POLL_MS = 500;
+
+/**
+ * App data folder in the user's local appdata.
+ * @returns {string} Absolute path.
+ */
+function dataDir() {
+    return path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'HiveEventScorer');
+}
+
+/**
+ * Strip a storage key or file name down to safe characters.
+ * @param {string} name Requested name.
+ * @returns {string} Sanitized name.
+ */
+function safeFileName(name) {
+    return String(name || '').replace(/[^A-Za-z0-9 ._-]/g, '').trim().slice(0, 80);
+}
+
+/**
+ * File that stores one key's value.
+ * @param {string} key Storage key.
+ * @returns {string} Absolute path.
+ */
+function storageFile(key) {
+    return path.join(dataDir(), safeFileName(key) + '.json');
+}
 
 /**
  * Folder with presets bundled alongside the app source or packaged resources.
@@ -232,6 +258,66 @@ ipcMain.handle('presets-delete', (event, name) => {
 ipcMain.handle('presets-open-folder', () => {
     fs.mkdirSync(userPresetsDir(), { recursive: true });
     shell.openPath(userPresetsDir());
+    return { ok: true };
+});
+
+ipcMain.on('storage-get', (event, key) => {
+    try {
+        event.returnValue = fs.readFileSync(storageFile(key), 'utf8');
+    } catch (err) {
+        event.returnValue = null;
+    }
+});
+
+ipcMain.on('storage-set', (event, key, value) => {
+    try {
+        fs.mkdirSync(dataDir(), { recursive: true });
+        fs.writeFileSync(storageFile(key), String(value), 'utf8');
+        event.returnValue = true;
+    } catch (err) {
+        event.returnValue = false;
+    }
+});
+
+ipcMain.on('storage-remove', (event, key) => {
+    try {
+        fs.unlinkSync(storageFile(key));
+    } catch (err) { /* already absent */ }
+    event.returnValue = true;
+});
+
+ipcMain.handle('save-json', (event, filename, text) => {
+    const base = safeFileName(filename);
+    if (!base) return { ok: false };
+    try {
+        const dir = path.join(dataDir(), 'saves');
+        fs.mkdirSync(dir, { recursive: true });
+        const file = path.join(dir, base);
+        fs.writeFileSync(file, String(text), 'utf8');
+        return { ok: true, path: file };
+    } catch (err) {
+        return { ok: false };
+    }
+});
+
+ipcMain.handle('save-image', async (event, filename, bytes) => {
+    const res = await dialog.showSaveDialog(mainWindow, {
+        title: 'Save poster',
+        defaultPath: path.join(app.getPath('pictures'), safeFileName(filename) || 'poster.png'),
+        filters: [{ name: 'PNG Image', extensions: ['png'] }]
+    });
+    if (res.canceled || !res.filePath) return { ok: false, canceled: true };
+    try {
+        fs.writeFileSync(res.filePath, Buffer.from(bytes));
+        return { ok: true, path: res.filePath };
+    } catch (err) {
+        return { ok: false };
+    }
+});
+
+ipcMain.handle('open-data-folder', () => {
+    fs.mkdirSync(dataDir(), { recursive: true });
+    shell.openPath(dataDir());
     return { ok: true };
 });
 

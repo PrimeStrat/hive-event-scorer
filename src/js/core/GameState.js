@@ -344,12 +344,13 @@
          * @returns {void}
          */
         loadFromStorage() {
-            if (typeof localStorage === 'undefined') return;
-            const savedTeams = localStorage.getItem('hive_teams');
+            const store = global.Hive.Storage;
+            if (!store) return;
+            const savedTeams = store.getItem('hive_teams');
             if (savedTeams) {
                 try { this.teams = JSON.parse(savedTeams); } catch (e) { console.error('teams load', e); }
             }
-            const savedSubs = localStorage.getItem('hive_substitutions');
+            const savedSubs = store.getItem('hive_substitutions');
             if (savedSubs) {
                 try {
                     const parsed = JSON.parse(savedSubs);
@@ -357,9 +358,9 @@
                 } catch (e) { console.error('subs load', e); }
             }
             try {
-                const eventData = localStorage.getItem('hive_event_data');
+                const eventData = store.getItem('hive_event_data');
                 if (eventData) this.applyData(JSON.parse(eventData), { includeTeams: false });
-                const history = localStorage.getItem('hive_game_history');
+                const history = store.getItem('hive_game_history');
                 if (history) {
                     const parsed = JSON.parse(history);
                     if (Array.isArray(parsed)) this.gameHistory = parsed;
@@ -371,15 +372,16 @@
         }
 
         /**
-         * Persist all state to localStorage.
+         * Persist all state to the app data store.
          * @returns {void}
          */
         syncToStorage() {
-            if (typeof localStorage === 'undefined') return;
-            localStorage.setItem('hive_teams', JSON.stringify(this.teams));
-            localStorage.setItem('hive_substitutions', JSON.stringify(this.substitutions));
-            localStorage.setItem('hive_game_history', JSON.stringify(this.gameHistory));
-            localStorage.setItem('hive_event_data', JSON.stringify(this.serialize()));
+            const store = global.Hive.Storage;
+            if (!store) return;
+            store.setItem('hive_teams', JSON.stringify(this.teams));
+            store.setItem('hive_substitutions', JSON.stringify(this.substitutions));
+            store.setItem('hive_game_history', JSON.stringify(this.gameHistory));
+            store.setItem('hive_event_data', JSON.stringify(this.serialize()));
         }
 
         /**
@@ -387,10 +389,10 @@
          * @returns {void}
          */
         saveTeams() {
-            if (typeof localStorage !== 'undefined') {
-                localStorage.setItem('hive_teams', JSON.stringify(this.teams));
-                localStorage.setItem('hive_substitutions', JSON.stringify(this.substitutions));
-            }
+            const store = global.Hive.Storage;
+            if (!store) return;
+            store.setItem('hive_teams', JSON.stringify(this.teams));
+            store.setItem('hive_substitutions', JSON.stringify(this.substitutions));
         }
 
         /**
@@ -411,10 +413,11 @@
             this.undoStack = [];
             this.redoStack = [];
 
-            if (typeof localStorage !== 'undefined') {
-                localStorage.removeItem('hive_game_history');
-                localStorage.removeItem('hive_event_data');
-                localStorage.removeItem('hive_emergency_backup');
+            const store = global.Hive.Storage;
+            if (store) {
+                store.removeItem('hive_game_history');
+                store.removeItem('hive_event_data');
+                store.removeItem('hive_emergency_backup');
             }
         }
 

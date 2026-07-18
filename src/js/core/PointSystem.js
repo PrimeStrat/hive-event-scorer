@@ -80,7 +80,8 @@
          */
         load() {
             try {
-                const raw = (typeof localStorage !== 'undefined') && localStorage.getItem(this.STORAGE_KEY);
+                const store = global.Hive.Storage;
+                const raw = store && store.getItem(this.STORAGE_KEY);
                 if (!raw) return;
                 const settings = JSON.parse(raw);
                 if (settings.pointSystems) this.pointSystems = PointSystem.mergePointSystems(settings.pointSystems);
@@ -118,9 +119,8 @@
                 enableChestPoints: this.enableChestPoints,
                 blockPartyTieMode: this.blockPartyTieMode
             };
-            if (typeof localStorage !== 'undefined') {
-                localStorage.setItem(this.STORAGE_KEY, JSON.stringify(settings));
-            }
+            const store = global.Hive.Storage;
+            if (store) store.setItem(this.STORAGE_KEY, JSON.stringify(settings));
             return settings;
         }
 
