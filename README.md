@@ -1,56 +1,72 @@
 # Hive Event Scorer
 
-This is an advanced chat interpreter that allows Hive Events to automatically calculate and score their events!
+A desktop app that scores Hive custom server events for you. It reads the game chat, figures out
+kills, placements and wins, and keeps a running scoreboard for the whole event.
 
-### Features
-- Team management and scoring
-- Automatically calculate event stats
-- Score editor
-- Customizable settings
-- Clean and intuitive interface
+Not affiliated with The Hive.
 
-### How To Use
-1. Open `index.html` in your web browser after downloading the project (no server or build step required)
-2. Navigate to the **Teams** tab to add and manage team rosters (assign each in-game player to a team)
-3. On the **Scorer** tab, pick the gamemode and paste the chat log, then **Process Chat**
-4. View scores and per-player performance on the **Stats** tab
-5. Adjust point values, detection, and your own IGN on the **Settings** tab
+## Getting started
 
-> Set **My IGN** in Settings so first-person log lines ("You killed ...", "You finished in 1st place")
-> are attributed to you. Leave it blank to skip those lines.
+1. Download and run the installer (or the portable exe) from the Releases page.
+2. Open the **Teams** tab and add your players to their teams.
+3. Open the **Settings** tab and put your Minecraft username in **My IGN**. This lets the app score
+   lines like "You killed ..." that only show up as "You" in your chat.
 
-### Supported gamemodes
-BedWars, SkyWars, Survival Games, DeathRun, Gravity, Block Drop, and Block Party — each interpreted by a
-dedicated parser tuned to The Hive's real chat formats. Combat kills are detected structurally, so any
-flavour kill verb ("rolled ... beyond space and time", "ten hearted", "silenced", ...) is handled
-automatically without a hard-coded list.
+That's it. The app comes preloaded with the HiveSilly point values, and everything you do is saved
+automatically to `AppData\Local\HiveEventScorer`, so you can close the app and pick up where you
+left off.
 
-### Statistics & exports
-The Statistics tab shows cumulative event results: **event standings** (team totals, each listing its
-players' totals) and a compact **all-players** list — click any player to open a modal with their full
-per-game breakdown and placements. (The live current game and point record stay on the Scorer tab.)
+## Scoring a game
 
-**Export PNG** opens a dialog where you type the event title and tweak team display names, then download two
-shareable posters — player standings and event winners — drawn on a canvas with no external libraries.
-Manual score edits are made per game via "Edit Scores" in Game History. **Wipe Statistics** clears all
-games/scores/player stats but keeps your teams (teams are only cleared from the Teams tab).
+1. On the **Scorer** tab, pick the gamemode.
+2. Get the chat into the app. Three ways:
+   - **Live Capture** - if you use the OderSo client, hit the Live Capture button and the app
+     scores the chat as it happens. Only new chat counts, so nothing old gets scored by accident.
+   - **Paste** - copy the chat into the text box and press Process Chat.
+   - **Drag and drop** - drop a `.txt` chat log onto the window. The app guesses the gamemode from
+     the file name (like `bedwars.txt` or `skywars 1.txt`) and scores it right away.
+3. Watch the scoreboard and activity log fill in. Undo and Redo are there if something goes wrong.
 
-### Importing logs
-Drag a `.txt` chat log onto the window: the gamemode is inferred from the filename (e.g. `bedwars.txt`,
-`skywars 1.txt`, `sg.txt`, `block party.txt`), a new game is started, and the log is processed automatically.
-Dropping a `.json` file loads tournament data instead.
+Playing BedWars? The chat only shows bed breaks against your own bed, so use the **Manual Events**
+panel to record each bed break as it happens.
 
-Saving is explicit (Save/Load JSON) — there is no crash/emergency backup. Starting a new game rolls the
-previous one into history and shows a brief, dismissible reminder to save tournament progress.
+When a game ends, it rolls into History automatically the next time you start a game.
 
-### Project structure
-```
-index.html            Single page; tabs switch client-side (no reload)
-css/                  global.css (tokens/base) + app.css (components)
-js/
-  core/               ChatUtils, Toast, PosterExport, PointSystem, GameState, ScoringEngine
-  parsers/            GamemodeParser (base) + one subclass per gamemode + registry
-  renderers/          Scoreboard / Teams / Stats / Settings views
-  app.js              Controller: wires the DOM to the engine and renderers
-tests/                Node harnesses (no dependencies)
-```
+## Substitutes
+
+If someone has to leave mid-event, open **Teams > Subs** and add the substitute's username along
+with who they're playing for. Everything the sub does from then on counts for the original player.
+
+## After the event
+
+- **Totals** shows the event standings and every player's points. Click a player for their full
+  game-by-game breakdown.
+- **History** lists every finished game. Use Edit Scores there if you need to fix a result by hand.
+- **Export PNG** (on Totals) makes shareable posters of the standings and winners. You pick where
+  each image gets saved.
+- **Save JSON / Load JSON** (top right) backs up the whole event to a file and loads it back later.
+  Saves go to `AppData\Local\HiveEventScorer\saves`.
+- **Wipe Statistics** clears all scores and history but keeps your teams.
+
+## Settings
+
+- **Point values** - every gamemode has its own point table, including placements down to 50th.
+  Anything you leave at 0 just doesn't score.
+- **Misc Toggles** - optional extras, all off by default:
+  - *Kill Leader bonus* - SkyWars kill leader gets bonus points at the end of the game.
+  - *2nd/3rd place team bonuses* - extra tiers for the team finish and last-team-standing bonuses.
+  - *Solo placements in PvP modes* - score SkyWars, Survival Games and BedWars placements per
+    player (by how long each player survived) instead of per team.
+  - *Mystery Chest points* - opening the SkyWars Mystery Chest scores points.
+- **Block Party tie handling** - when several players survive the last round, choose whether they
+  all share 1st place or all share the next placement down (3 tied players = all 3rd).
+- **Presets** - save your whole settings setup under a name and swap between them. Two presets
+  come bundled: HiveSilly (the default) and SandRosey.
+
+## Supported gamemodes
+
+BedWars, SkyWars, Survival Games, DeathRun, Gravity, Block Drop and Block Party. Kill messages are
+matched by the player names in them, so The Hive's joke kill messages ("rolled ... beyond space
+and time", "ten hearted", and so on) all count without any setup.
+
+You can also add your own gamemode in Settings if you run something custom.
