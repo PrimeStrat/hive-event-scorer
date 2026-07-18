@@ -12,6 +12,7 @@
     function defaultPointSystems() {
         return {
             'DeathRun': { '1st place': 4, '2nd place': 3, '3rd place': 2, '4th place': 1, '5th place': 1, 'First full team finish': 1, 'Second full team finish': 0, 'Third full team finish': 0 },
+            'SkyWars': { '1st place': 4, '2nd place': 3, '3rd place': 2, 'Kill': 1, 'Kill Leader': 0, 'First Blood': 0, 'Mystery Chest': 0 },
             'Survival Games': { '1st place': 4, '2nd place': 3, '3rd place': 2, 'Kill': 1, 'First Blood': 0 },
             'BedWars': { '1st place': 4, '2nd place': 3, '3rd place': 2, 'Kill': 1, 'Bed Break': 1, 'First Blood': 0 },
             'Gravity': { '1st place': 4, '2nd place': 3, '3rd place': 2, '4th place': 1, '5th place': 1, 'First full team finish': 1, 'Second full team finish': 0, 'Third full team finish': 0 },
