@@ -22,7 +22,14 @@
         "files": [
             "src/**/*"
         ],
+        "extraResources": [
+            {
+                "from": "preset-settings",
+                "to": "preset-settings"
+            }
+        ],
         "win": {
+            "icon": "src/assets/icon.ico",
             "target": [
                 "portable",
                 "nsis"

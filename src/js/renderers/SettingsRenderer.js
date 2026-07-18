@@ -24,6 +24,7 @@
          */
         isToggledOffKey(action) {
             if (action === 'Kill Leader') return !this.points.enableKillLeader;
+            if (action === 'Mystery Chest') return !this.points.enableChestPoints;
             if (/^(Second|Third) (full team finish|last team standing)$/.test(action)) {
                 return !this.points.enableExtendedTeamBonuses;
             }
@@ -61,8 +62,18 @@
                 else hiddenRows += row;
             }
 
+            const tieModeRow = mode === 'Block Party' ? `
+                <div class="point-item">
+                    <label for="blockPartyTieMode">Tie Handling</label>
+                    <select id="blockPartyTieMode">
+                        <option value="shared-first" ${this.points.blockPartyTieMode === 'shared-first' ? 'selected' : ''}>Multiple 1st Places</option>
+                        <option value="shared-placement" ${this.points.blockPartyTieMode === 'shared-placement' ? 'selected' : ''}>Shared Next Placement</option>
+                    </select>
+                </div>` : '';
+
             host.innerHTML = `<h3>Point Values for ${this.escapeHtml(mode)}</h3>` +
                 otherRows +
+                tieModeRow +
                 `<h4 class="placement-heading">Placement Points</h4>` +
                 placementRows +
                 `<div id="extraPlacements" class="extra-placements hidden">${hiddenRows}</div>` +
@@ -96,6 +107,10 @@
             if (killLeader) killLeader.checked = this.points.enableKillLeader === true;
             const extBonuses = this.$('enableExtendedTeamBonuses');
             if (extBonuses) extBonuses.checked = this.points.enableExtendedTeamBonuses === true;
+            const soloPlacements = this.$('enableSoloPlacements');
+            if (soloPlacements) soloPlacements.checked = this.points.enableSoloPlacements === true;
+            const chestPoints = this.$('enableChestPoints');
+            if (chestPoints) chestPoints.checked = this.points.enableChestPoints === true;
             this.updatePatternVisibility();
         }
 
@@ -142,6 +157,12 @@
             if (killLeader) this.points.enableKillLeader = killLeader.checked;
             const extBonuses = this.$('enableExtendedTeamBonuses');
             if (extBonuses) this.points.enableExtendedTeamBonuses = extBonuses.checked;
+            const soloPlacements = this.$('enableSoloPlacements');
+            if (soloPlacements) this.points.enableSoloPlacements = soloPlacements.checked;
+            const chestPoints = this.$('enableChestPoints');
+            if (chestPoints) this.points.enableChestPoints = chestPoints.checked;
+            const tieMode = this.$('blockPartyTieMode');
+            if (tieMode) this.points.blockPartyTieMode = tieMode.value;
         }
 
         renderAll() {

@@ -32,5 +32,41 @@ contextBridge.exposeInMainWorld('hiveDesktop', {
      */
     onLines: handler => {
         ipcRenderer.on('live-lines', (event, lines) => handler(lines));
+    },
+
+    presets: {
+        /**
+         * List available presets (user presets shadow bundled ones by name).
+         * @returns {Promise<Array<{name: string, source: string}>>} Preset entries.
+         */
+        list: () => ipcRenderer.invoke('presets-list'),
+
+        /**
+         * Read a preset's settings object.
+         * @param {string} name Preset name.
+         * @returns {Promise<Object|null>} Settings or null.
+         */
+        read: name => ipcRenderer.invoke('presets-read', name),
+
+        /**
+         * Save settings as a user preset.
+         * @param {string} name Preset name.
+         * @param {Object} settings Settings object.
+         * @returns {Promise<{ok: boolean, name: string}>} Result.
+         */
+        save: (name, settings) => ipcRenderer.invoke('presets-save', name, settings),
+
+        /**
+         * Delete a user preset.
+         * @param {string} name Preset name.
+         * @returns {Promise<{ok: boolean}>} Result.
+         */
+        remove: name => ipcRenderer.invoke('presets-delete', name),
+
+        /**
+         * Open the user presets folder in the file explorer.
+         * @returns {Promise<{ok: boolean}>} Result.
+         */
+        openFolder: () => ipcRenderer.invoke('presets-open-folder')
     }
 });

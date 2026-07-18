@@ -3,11 +3,53 @@
  */
 'use strict';
 
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
 const POLL_MS = 500;
+
+/**
+ * Folder with presets bundled alongside the app source or packaged resources.
+ * @returns {string} Absolute path.
+ */
+function bundledPresetsDir() {
+    if (app.isPackaged) return path.join(process.resourcesPath, 'preset-settings');
+    return path.join(__dirname, '..', 'preset-settings');
+}
+
+/**
+ * Writable folder for user-saved presets.
+ * @returns {string} Absolute path.
+ */
+function userPresetsDir() {
+    return path.join(app.getPath('userData'), 'presets');
+}
+
+/**
+ * Strip a preset name down to a safe file base name.
+ * @param {string} name Requested preset name.
+ * @returns {string} Sanitized base name.
+ */
+function safePresetName(name) {
+    return String(name || '').replace(/[^A-Za-z0-9 _-]/g, '').trim().slice(0, 60);
+}
+
+/**
+ * List .json presets in a folder.
+ * @param {string} dir Folder to scan.
+ * @param {string} source 'bundled' or 'user'.
+ * @returns {Array<{name: string, file: string, source: string}>} Entries.
+ */
+function listPresetDir(dir, source) {
+    try {
+        return fs.readdirSync(dir)
+            .filter(f => /\.json$/i.test(f))
+            .map(f => ({ name: f.replace(/\.json$/i, ''), file: path.join(dir, f), source }));
+    } catch (err) {
+        return [];
+    }
+}
 
 /**
  * Resolve the msglog path for the current user (HIVE_MSGLOG overrides).
@@ -109,6 +151,7 @@ function createWindow() {
         width: 1280,
         height: 860,
         autoHideMenuBar: true,
+        icon: path.join(__dirname, 'assets', 'icon.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -140,6 +183,57 @@ ipcMain.handle('live-capture-stop', () => {
 });
 
 ipcMain.handle('live-capture-path', () => msglogPath());
+
+ipcMain.handle('presets-list', () => {
+    const seen = new Set();
+    const all = [...listPresetDir(userPresetsDir(), 'user'), ...listPresetDir(bundledPresetsDir(), 'bundled')];
+    return all.filter(p => {
+        if (seen.has(p.name)) return false;
+        seen.add(p.name);
+        return true;
+    });
+});
+
+ipcMain.handle('presets-read', (event, name) => {
+    const base = safePresetName(name);
+    if (!base) return null;
+    for (const dir of [userPresetsDir(), bundledPresetsDir()]) {
+        const file = path.join(dir, base + '.json');
+        try {
+            return JSON.parse(fs.readFileSync(file, 'utf8'));
+        } catch (err) { /* try the next location */ }
+    }
+    return null;
+});
+
+ipcMain.handle('presets-save', (event, name, settings) => {
+    const base = safePresetName(name);
+    if (!base || !settings) return { ok: false };
+    try {
+        fs.mkdirSync(userPresetsDir(), { recursive: true });
+        fs.writeFileSync(path.join(userPresetsDir(), base + '.json'), JSON.stringify(settings, null, 2), 'utf8');
+        return { ok: true, name: base };
+    } catch (err) {
+        return { ok: false };
+    }
+});
+
+ipcMain.handle('presets-delete', (event, name) => {
+    const base = safePresetName(name);
+    if (!base) return { ok: false };
+    try {
+        fs.unlinkSync(path.join(userPresetsDir(), base + '.json'));
+        return { ok: true };
+    } catch (err) {
+        return { ok: false };
+    }
+});
+
+ipcMain.handle('presets-open-folder', () => {
+    fs.mkdirSync(userPresetsDir(), { recursive: true });
+    shell.openPath(userPresetsDir());
+    return { ok: true };
+});
 
 app.whenReady().then(() => {
     createWindow();

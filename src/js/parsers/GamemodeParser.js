@@ -166,6 +166,37 @@
         }
 
         /**
+         * Award the First Blood bonus once per game to the first killer; only in
+         * modes whose point table declares the key.
+         * @param {string} playerName Canonical killer name.
+         * @param {string} teamName Killer's team.
+         * @returns {void}
+         */
+        awardFirstBlood(playerName, teamName) {
+            if (!playerName || !this.engine.isScorableTeam(teamName)) return;
+            const table = this.points.forGamemode(this.name) || {};
+            if (table['First Blood'] === undefined) return;
+            const alreadyAwarded = Object.values(this.state.scores).some(score =>
+                Array.isArray(score.events) && score.events.some(e => e.type === 'First Blood'));
+            if (alreadyAwarded) return;
+            const points = this.engine.awardPoints(teamName, 'First Blood');
+            const score = this.state.ensureScore(teamName);
+            const event = score.events[score.events.length - 1];
+            if (event && event.type === 'First Blood') event.player = playerName;
+            this.state.addLog(`${playerName} got FIRST BLOOD!${points ? ` (+${points})` : ''}`, 'success');
+        }
+
+        /**
+         * Label a logged name, marking substitutes as scoring for their original.
+         * @param {string} rawName Name as it appeared in chat.
+         * @param {string} canonical Canonical roster name.
+         * @returns {string} Display label.
+         */
+        subLabel(rawName, canonical) {
+            return rawName !== canonical ? `${rawName} (for ${canonical})` : canonical;
+        }
+
+        /**
          * Credit a kill with no known victim.
          * @param {string} killerName Killer name.
          * @returns {string|boolean} 'kill' or false.
@@ -173,13 +204,15 @@
         recordKillPointOnly(killerName) {
             const killerTeam = this.resolvePlayerTeam(killerName);
             if (!killerTeam) return false;
-            const ks = this.state.getOrCreatePlayerStats(killerName, killerTeam);
+            const canonical = this.state.resolveCanonicalPlayer(killerName);
+            const ks = this.state.getOrCreatePlayerStats(canonical, killerTeam);
             ks.kills++;
             this.engine.awardPoints(killerTeam, 'Kill');
             this.state.ensureScore(killerTeam).kills.push({
-                player: killerName, victim: '?', time: new Date().toISOString()
+                player: canonical, victim: '?', time: new Date().toISOString()
             });
-            this.state.addLog(`${killerName} got a kill`, 'success');
+            this.awardFirstBlood(canonical, killerTeam);
+            this.state.addLog(`${this.subLabel(killerName, canonical)} got a kill`, 'success');
             return 'kill';
         }
 
@@ -192,20 +225,23 @@
         recordKill(killerName, victimName) {
             const killerTeam = this.resolvePlayerTeam(killerName);
             const victimTeam = this.resolvePlayerTeam(victimName);
+            const canonicalKiller = this.state.resolveCanonicalPlayer(killerName);
+            const canonicalVictim = this.state.resolveCanonicalPlayer(victimName);
             if (killerTeam) {
-                const ks = this.state.getOrCreatePlayerStats(killerName, killerTeam);
+                const ks = this.state.getOrCreatePlayerStats(canonicalKiller, killerTeam);
                 ks.kills++;
                 this.engine.awardPoints(killerTeam, 'Kill');
                 this.state.ensureScore(killerTeam).kills.push({
-                    player: killerName, victim: victimName, time: new Date().toISOString()
+                    player: canonicalKiller, victim: canonicalVictim, time: new Date().toISOString()
                 });
+                this.awardFirstBlood(canonicalKiller, killerTeam);
             }
             if (victimTeam) {
-                const vs = this.state.getOrCreatePlayerStats(victimName, victimTeam);
+                const vs = this.state.getOrCreatePlayerStats(canonicalVictim, victimTeam);
                 vs.deaths++;
-                this.markEliminated(victimName, victimTeam);
+                this.markEliminated(canonicalVictim, victimTeam);
             }
-            this.state.addLog(`${killerName} eliminated ${victimName}`, 'success');
+            this.state.addLog(`${this.subLabel(killerName, canonicalKiller)} eliminated ${this.subLabel(victimName, canonicalVictim)}`, 'success');
             return 'kill';
         }
 
@@ -217,10 +253,11 @@
         recordDeath(victimName) {
             const team = this.resolvePlayerTeam(victimName);
             if (!team) return false;
-            const vs = this.state.getOrCreatePlayerStats(victimName, team);
+            const canonical = this.state.resolveCanonicalPlayer(victimName);
+            const vs = this.state.getOrCreatePlayerStats(canonical, team);
             vs.deaths++;
-            this.markEliminated(victimName, team);
-            this.state.addLog(`${victimName} was eliminated`, 'warning');
+            this.markEliminated(canonical, team);
+            this.state.addLog(`${this.subLabel(victimName, canonical)} was eliminated`, 'warning');
             return 'death';
         }
 
@@ -231,11 +268,12 @@
          * @returns {void}
          */
         markEliminated(playerName, teamName) {
-            const ps = this.state.getOrCreatePlayerStats(playerName, teamName);
+            const canonical = this.state.resolveCanonicalPlayer(playerName);
+            const ps = this.state.getOrCreatePlayerStats(canonical, teamName);
             if (!ps.eliminated) {
                 ps.eliminated = true;
-                if (!this.state.playerEliminationOrder.includes(playerName)) {
-                    this.state.playerEliminationOrder.push(playerName);
+                if (!this.state.playerEliminationOrder.includes(canonical)) {
+                    this.state.playerEliminationOrder.push(canonical);
                 }
             }
         }
@@ -396,21 +434,22 @@
         recordIndividualPlacement(playerName, position) {
             const team = this.resolvePlayerTeam(playerName);
             if (!team) return false;
-            const ps = this.state.getOrCreatePlayerStats(playerName, team);
+            const canonical = this.state.resolveCanonicalPlayer(playerName);
+            const ps = this.state.getOrCreatePlayerStats(canonical, team);
             ps.placement = ChatUtils.ordinal(position);
 
             const key = this.engine.placementKey(position);
             if (key) {
                 const score = this.state.ensureScore(team);
-                const already = score.placements.some(p => p.player === playerName && p.position === position);
+                const already = score.placements.some(p => p.player === canonical && p.position === position);
                 if (!already) {
                     this.engine.awardPoints(team, key);
-                    score.placements.push({ player: playerName, position, time: new Date().toISOString() });
+                    score.placements.push({ player: canonical, position, time: new Date().toISOString() });
                 }
             }
-            this.state.addLog(`${team} - ${playerName} finished ${ChatUtils.ordinal(position)}`, 'info');
+            this.state.addLog(`${team} - ${this.subLabel(playerName, canonical)} finished ${ChatUtils.ordinal(position)}`, 'info');
 
-            if (this.features.teamFinish) this.trackTeamFinish(team, playerName);
+            if (this.features.teamFinish) this.trackTeamFinish(team, canonical);
             return true;
         }
 

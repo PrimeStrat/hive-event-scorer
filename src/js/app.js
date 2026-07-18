@@ -35,6 +35,26 @@
             this.applySavedGamemodeSelection();
             this.syncGamemodeFromSelection();
             this.updateUI();
+            this.applyDefaultPreset();
+        }
+
+        /**
+         * First run only (no saved settings): load the HiveSilly preset as the
+         * default configuration. Desktop app only.
+         * @returns {Promise<void>} Resolves when applied or skipped.
+         */
+        async applyDefaultPreset() {
+            const bridge = global.hiveDesktop;
+            if (!bridge || !bridge.presets) return;
+            if (typeof localStorage !== 'undefined' && localStorage.getItem(this.points.STORAGE_KEY)) return;
+            const settings = await bridge.presets.read('HiveSilly');
+            if (!settings) return;
+            this.points.importSettings(settings);
+            this.updateGamemodeDropdowns();
+            this.settingsView.renderAll();
+            const sel = document.getElementById('presetSelect');
+            if (sel) sel.value = 'HiveSilly';
+            this.state.addLog('Loaded default settings preset "HiveSilly"', 'info');
         }
 
         /**
@@ -78,6 +98,7 @@
 
             this.on('undoBtn', 'click', () => this.performUndo());
             this.on('redoBtn', 'click', () => this.performRedo());
+            this.on('addBedBreak', 'click', () => this.addManualBedBreak());
 
             const gh = document.getElementById('gameHistory');
             if (gh) gh.addEventListener('click', e => this.handleGameHistoryActions(e));
@@ -317,6 +338,18 @@
                 this.settingsView.renderPoints();
                 this.state.addLog(`2nd/3rd team bonuses ${e.target.checked ? 'enabled' : 'disabled'}`, 'info');
             });
+            this.on('enableSoloPlacements', 'change', e => {
+                this.points.enableSoloPlacements = e.target.checked;
+                this.points.save();
+                this.settingsView.renderPoints();
+                this.state.addLog(`Solo placements in PvP modes ${e.target.checked ? 'enabled' : 'disabled'}`, 'info');
+            });
+            this.on('enableChestPoints', 'change', e => {
+                this.points.enableChestPoints = e.target.checked;
+                this.points.save();
+                this.settingsView.renderPoints();
+                this.state.addLog(`Mystery Chest points ${e.target.checked ? 'enabled' : 'disabled'}`, 'info');
+            });
             this.on('resetSettings', 'click', () => {
                 if (confirm('Reset all settings to defaults? This cannot be undone.')) {
                     this.points.reset(); this.updateGamemodeDropdowns(); this.settingsView.renderAll();
@@ -326,7 +359,82 @@
             this.on('exportSettings', 'click', () => this.exportSettingsJSON());
             this.on('importSettings', 'click', () => document.getElementById('settingsFileInput').click());
             this.on('settingsFileInput', 'change', e => this.importSettingsJSON(e));
+            this.setupPresets();
             this.settingsView.renderAll();
+        }
+
+        /**
+         * Wire the presets section (desktop app only).
+         * @returns {void}
+         */
+        setupPresets() {
+            const bridge = global.hiveDesktop;
+            const section = document.getElementById('presetsSection');
+            if (!bridge || !bridge.presets || !section) return;
+            section.classList.remove('hidden');
+            this.refreshPresetList();
+
+            this.on('loadPreset', 'click', async () => {
+                const name = (document.getElementById('presetSelect') || {}).value;
+                if (!name) return;
+                const settings = await bridge.presets.read(name);
+                if (!settings) {
+                    H.Toast.show(`Could not read preset "${name}".`, { title: 'Presets', type: 'warning' });
+                    return;
+                }
+                this.points.importSettings(settings);
+                this.updateGamemodeDropdowns();
+                this.settingsView.renderAll();
+                this.state.addLog(`Loaded settings preset "${name}"`, 'success');
+                H.Toast.show(`Preset "${name}" loaded.`, { title: 'Presets', duration: 3500 });
+            });
+
+            this.on('savePreset', 'click', async () => {
+                const name = prompt('Preset name:');
+                if (!name || !name.trim()) return;
+                this.settingsView.collectFromDom();
+                this.points.save();
+                const res = await bridge.presets.save(name.trim(), this.points.exportSettings());
+                if (res.ok) {
+                    await this.refreshPresetList(res.name);
+                    this.state.addLog(`Saved settings preset "${res.name}"`, 'success');
+                    H.Toast.show(`Preset "${res.name}" saved.`, { title: 'Presets', duration: 3500 });
+                } else {
+                    H.Toast.show('Could not save the preset.', { title: 'Presets', type: 'warning' });
+                }
+            });
+
+            this.on('deletePreset', 'click', async () => {
+                const name = (document.getElementById('presetSelect') || {}).value;
+                if (!name) return;
+                if (!confirm(`Delete preset "${name}"? Bundled presets cannot be deleted.`)) return;
+                const res = await bridge.presets.remove(name);
+                if (res.ok) {
+                    await this.refreshPresetList();
+                    this.state.addLog(`Deleted settings preset "${name}"`, 'warning');
+                } else {
+                    H.Toast.show('Only user-saved presets can be deleted.', { title: 'Presets', type: 'warning' });
+                }
+            });
+
+            this.on('openPresetsFolder', 'click', () => bridge.presets.openFolder());
+        }
+
+        /**
+         * Repopulate the preset dropdown.
+         * @param {string} selectName Preset to select after refresh.
+         * @returns {Promise<void>} Resolves when repopulated.
+         */
+        async refreshPresetList(selectName) {
+            const bridge = global.hiveDesktop;
+            const sel = document.getElementById('presetSelect');
+            if (!bridge || !bridge.presets || !sel) return;
+            const presets = await bridge.presets.list();
+            const current = selectName || sel.value;
+            sel.innerHTML = '<option value="">-- Choose a preset --</option>' + presets.map(p =>
+                `<option value="${this.statsView.escapeHtml(p.name)}">${this.statsView.escapeHtml(p.name)}${p.source === 'bundled' ? ' (bundled)' : ''}</option>`
+            ).join('');
+            if (current) sel.value = current;
         }
 
         /**
@@ -499,6 +607,103 @@
             this.state.saveTeams(); this.state.syncToStorage();
             this.teamsView.render(); this.updateUI();
             this.state.addLog(`${playerName} moved from ${oldTeam} to ${newTeam}`, 'info');
+        }
+
+        /**
+         * Register a substitute whose events score for a rostered player.
+         * @param {string} subName Substitute IGN.
+         * @param {string} originalPlayer Rostered player they replace.
+         * @returns {void}
+         */
+        addSubstitution(subName, originalPlayer) {
+            if (this.state.findPlayerTeam(subName) && !this.state.substitutions[subName]) {
+                H.Toast.show(`${subName} is already on a team roster.`, { title: 'Cannot add sub', type: 'warning' });
+                return;
+            }
+            if (subName === originalPlayer) {
+                H.Toast.show('A player cannot substitute for themselves.', { title: 'Cannot add sub', type: 'warning' });
+                return;
+            }
+            this.state.pushUndo('addSubstitution');
+            this.state.substitutions[subName] = originalPlayer;
+            this.state.saveTeams(); this.state.syncToStorage();
+            this.state.addLog(`${subName} now scores for ${originalPlayer}`, 'info');
+            this.teamsView.render();
+        }
+
+        /**
+         * Point an existing substitute at a different rostered player.
+         * @param {string} subName Substitute IGN.
+         * @param {string} originalPlayer New rostered player.
+         * @returns {void}
+         */
+        changeSubstitution(subName, originalPlayer) {
+            if (!this.state.substitutions[subName] || this.state.substitutions[subName] === originalPlayer) return;
+            this.state.pushUndo('changeSubstitution');
+            this.state.substitutions[subName] = originalPlayer;
+            this.state.saveTeams(); this.state.syncToStorage();
+            this.state.addLog(`${subName} now scores for ${originalPlayer}`, 'info');
+            this.teamsView.render();
+        }
+
+        /**
+         * Remove a substitute mapping.
+         * @param {string} subName Substitute IGN.
+         * @returns {void}
+         */
+        removeSubstitution(subName) {
+            if (!this.state.substitutions[subName]) return;
+            this.state.pushUndo('removeSubstitution');
+            delete this.state.substitutions[subName];
+            this.state.saveTeams(); this.state.syncToStorage();
+            this.state.addLog(`Removed substitute ${subName}`, 'info');
+            this.teamsView.render();
+        }
+
+        /**
+         * Manually credit a bed break to a player (BedWars logs cannot attribute
+         * breaks against other teams' beds).
+         * @returns {void}
+         */
+        addManualBedBreak() {
+            const sel = document.getElementById('bedBreakPlayer');
+            const player = sel ? sel.value : '';
+            if (!player) { alert('Pick the player who broke the bed.'); return; }
+            const team = this.state.findPlayerTeam(player);
+            if (!this.engine.isScorableTeam(team)) return;
+            this.state.pushUndo('addBedBreak');
+            const canonical = this.state.resolveCanonicalPlayer(player);
+            this.state.getOrCreatePlayerStats(canonical, team).bedBreaks++;
+            this.engine.awardPoints(team, 'Bed Break');
+            this.state.ensureScore(team).bedBreaks.push({ player: canonical, time: new Date().toISOString() });
+            this.state.addLog(`${team} - ${canonical} broke a bed (manual)`, 'success');
+            this.state.syncToStorage();
+            this.updateUI();
+        }
+
+        /**
+         * Show and populate the manual bed-break control for bed-break gamemodes.
+         * @returns {void}
+         */
+        updateManualEvents() {
+            const row = document.getElementById('manualEvents');
+            if (!row) return;
+            const features = this.points.featuresFor(this.state.gamemode) || {};
+            row.classList.toggle('hidden', !features.bedBreaks);
+            if (!features.bedBreaks) return;
+
+            const sel = document.getElementById('bedBreakPlayer');
+            if (!sel) return;
+            const current = sel.value;
+            const groups = Object.entries(this.state.teams)
+                .filter(([t]) => t !== 'UNKNOWN')
+                .sort((a, b) => a[0].localeCompare(b[0]));
+            sel.innerHTML = '<option value="">-- Player --</option>' + groups.map(([teamName, team]) => {
+                const opts = (team.players || []).map(p =>
+                    `<option value="${this.statsView.escapeHtml(p)}">${this.statsView.escapeHtml(p)}</option>`).join('');
+                return `<optgroup label="${this.statsView.escapeHtml(teamName)}">${opts}</optgroup>`;
+            }).join('');
+            if (current) sel.value = current;
         }
 
         /**
@@ -905,6 +1110,7 @@
         updateUI() {
             this.scoreboard.renderAll();
             this.updateUndoRedoButtons();
+            this.updateManualEvents();
             const cm = document.getElementById('currentGamemode');
             if (cm) cm.textContent = this.state.gamemode || 'None';
         }

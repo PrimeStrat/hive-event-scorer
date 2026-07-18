@@ -31,6 +31,7 @@
             this.currentGame = null;
             this.scores = {};
             this.teams = {};
+            this.substitutions = {};
             this.playerStats = {};
             this.activityLog = [];
             this.eliminationOrder = [];
@@ -62,19 +63,29 @@
         }
 
         /**
-         * Team a player is rostered on.
+         * Map a substitute's name to the rostered player they play for.
+         * @param {string} playerName Logged player name.
+         * @returns {string} Canonical roster name.
+         */
+        resolveCanonicalPlayer(playerName) {
+            return this.substitutions[playerName] || playerName;
+        }
+
+        /**
+         * Team a player is rostered on; substitutes resolve to their original.
          * @param {string} playerName Player name.
          * @returns {string|null} Team name or null.
          */
         findPlayerTeam(playerName) {
+            const canonical = this.resolveCanonicalPlayer(playerName);
             for (const [teamName, data] of Object.entries(this.teams)) {
-                if (data.players && data.players.includes(playerName)) return teamName;
+                if (data.players && data.players.includes(canonical)) return teamName;
             }
             return null;
         }
 
         /**
-         * Every rostered player name across all teams.
+         * Every rostered player name plus substitute aliases (chat-detectable).
          * @returns {string[]} Player names.
          */
         allPlayerNames() {
@@ -82,7 +93,8 @@
             for (const data of Object.values(this.teams)) {
                 if (data.players) names.push(...data.players);
             }
-            return names;
+            names.push(...Object.keys(this.substitutions || {}));
+            return [...new Set(names)];
         }
 
         /**
@@ -116,21 +128,23 @@
         }
 
         /**
-         * Return a player's stats record, creating it if missing.
+         * Return a player's stats record, creating it if missing. Substitute names
+         * resolve to the original player so their stats merge.
          * @param {string} playerName Player name.
          * @param {string} teamName Team to associate.
          * @returns {Object} The stats record.
          */
         getOrCreatePlayerStats(playerName, teamName) {
-            if (!this.playerStats[playerName]) {
-                this.playerStats[playerName] = {
+            const canonical = this.resolveCanonicalPlayer(playerName);
+            if (!this.playerStats[canonical]) {
+                this.playerStats[canonical] = {
                     team: teamName, kills: 0, deaths: 0, finalKills: 0,
                     bedBreaks: 0, eliminated: false, placement: null
                 };
             } else if (teamName) {
-                this.playerStats[playerName].team = teamName;
+                this.playerStats[canonical].team = teamName;
             }
-            return this.playerStats[playerName];
+            return this.playerStats[canonical];
         }
 
         /**
@@ -189,6 +203,7 @@
                 currentGame: clone(this.currentGame),
                 gameHistory: clone(this.gameHistory),
                 teams: clone(this.teams),
+                substitutions: clone(this.substitutions),
                 activityLog: clone(this.activityLog),
                 playerStats: clone(this.playerStats),
                 scores: clone(this.scores),
@@ -208,6 +223,7 @@
             this.currentGame = clone(s.currentGame);
             this.gameHistory = clone(s.gameHistory);
             this.teams = clone(s.teams);
+            this.substitutions = clone(s.substitutions || {});
             this.activityLog = clone(s.activityLog);
             this.playerStats = clone(s.playerStats);
             this.scores = clone(s.scores);
@@ -283,6 +299,7 @@
         serialize(extra = {}) {
             return Object.assign({
                 teams: this.teams,
+                substitutions: this.substitutions,
                 currentGame: this.currentGame,
                 scores: this.scores,
                 playerStats: this.playerStats,
@@ -306,6 +323,9 @@
         applyData(data, { includeTeams = true } = {}) {
             if (!data) return;
             if (includeTeams && data.teams) this.teams = data.teams;
+            if (data.substitutions && typeof data.substitutions === 'object' && !Array.isArray(data.substitutions)) {
+                this.substitutions = data.substitutions;
+            }
             if (data.currentGame) this.currentGame = data.currentGame;
             if (data.scores) this.scores = data.scores;
             if (data.playerStats) this.playerStats = data.playerStats;
@@ -329,6 +349,13 @@
             if (savedTeams) {
                 try { this.teams = JSON.parse(savedTeams); } catch (e) { console.error('teams load', e); }
             }
+            const savedSubs = localStorage.getItem('hive_substitutions');
+            if (savedSubs) {
+                try {
+                    const parsed = JSON.parse(savedSubs);
+                    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) this.substitutions = parsed;
+                } catch (e) { console.error('subs load', e); }
+            }
             try {
                 const eventData = localStorage.getItem('hive_event_data');
                 if (eventData) this.applyData(JSON.parse(eventData), { includeTeams: false });
@@ -350,17 +377,19 @@
         syncToStorage() {
             if (typeof localStorage === 'undefined') return;
             localStorage.setItem('hive_teams', JSON.stringify(this.teams));
+            localStorage.setItem('hive_substitutions', JSON.stringify(this.substitutions));
             localStorage.setItem('hive_game_history', JSON.stringify(this.gameHistory));
             localStorage.setItem('hive_event_data', JSON.stringify(this.serialize()));
         }
 
         /**
-         * Persist team rosters only.
+         * Persist team rosters and substitutions only.
          * @returns {void}
          */
         saveTeams() {
             if (typeof localStorage !== 'undefined') {
                 localStorage.setItem('hive_teams', JSON.stringify(this.teams));
+                localStorage.setItem('hive_substitutions', JSON.stringify(this.substitutions));
             }
         }
 

@@ -238,30 +238,48 @@
         /**
          * Rank every player from elimination order (survivors on top) and award
          * last-standing team bonuses; 2nd/3rd tiers need the extended toggle.
+         * Block Party ties among survivors follow blockPartyTieMode.
          * @returns {void}
          */
         finalizePlayerPlacements() {
-            const players = this.state.allPlayerNames().filter(n => this.isScorablePlayer(n));
+            const players = [...new Set(this.state.allPlayerNames().map(n => this.state.resolveCanonicalPlayer(n)))]
+                .filter(n => this.isScorablePlayer(n));
             const totalPlayers = players.length;
             if (totalPlayers === 0) return;
 
             const assigned = new Set();
             const finalPositions = [];
             const order = this.state.playerEliminationOrder.filter(n => this.isScorablePlayer(n));
+            const survivors = players.filter(n => !order.includes(n)).sort((a, b) => a.localeCompare(b));
+            const isBlockPartyTie = this.state.gamemode === 'Block Party' && survivors.length > 1;
+            const tieMode = this.points.blockPartyTieMode || 'shared-first';
+
             for (let i = 0; i < order.length; i++) {
                 const name = order[i];
                 const team = this.state.findPlayerTeam(name);
-                const pos = totalPlayers - i;
+                // shared-first ties occupy 1st, pushing eliminated players down one slot.
+                const pos = (isBlockPartyTie && tieMode === 'shared-first')
+                    ? order.length - i + 1
+                    : totalPlayers - i;
                 this.recordPlayerPlacement(team, name, pos);
                 finalPositions.push({ team, position: pos });
                 assigned.add(name);
             }
-            const survivors = players.filter(n => !assigned.has(n)).sort((a, b) => a.localeCompare(b));
-            for (let i = 0; i < survivors.length; i++) {
-                const team = this.state.findPlayerTeam(survivors[i]);
-                const pos = survivors.length - i;
-                this.recordPlayerPlacement(team, survivors[i], pos);
-                finalPositions.push({ team, position: pos });
+
+            if (isBlockPartyTie) {
+                const tiedPosition = tieMode === 'shared-placement' ? survivors.length : 1;
+                for (const name of survivors) {
+                    const team = this.state.findPlayerTeam(name);
+                    this.recordPlayerPlacement(team, name, tiedPosition);
+                    finalPositions.push({ team, position: tiedPosition });
+                }
+            } else {
+                for (let i = 0; i < survivors.length; i++) {
+                    const team = this.state.findPlayerTeam(survivors[i]);
+                    const pos = survivors.length - i;
+                    this.recordPlayerPlacement(team, survivors[i], pos);
+                    finalPositions.push({ team, position: pos });
+                }
             }
 
             const bestByTeam = {};
@@ -370,9 +388,12 @@
             if (Array.isArray(teamScore.bedBreaks)) {
                 total += teamScore.bedBreaks.filter(e => e.player === playerName).length * bedPts;
             }
-            const leaderPts = Number(table['Kill Leader'] || 0);
-            if (leaderPts && Array.isArray(teamScore.events)) {
-                total += teamScore.events.filter(e => e.type === 'Kill Leader' && e.player === playerName).length * leaderPts;
+            if (Array.isArray(teamScore.events)) {
+                for (const eventType of ['Kill Leader', 'First Blood', 'Mystery Chest']) {
+                    const pts = Number(table[eventType] || 0);
+                    if (!pts) continue;
+                    total += teamScore.events.filter(e => e.type === eventType && e.player === playerName).length * pts;
+                }
             }
 
             let hasPlacementRecord = false;
