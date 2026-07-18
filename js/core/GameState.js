@@ -36,6 +36,7 @@
             this.currentGame = null;
             this.scores = {};        // teamName -> { score, placements[], kills[], bedBreaks[], events[] }
             this.teams = {};         // teamName -> { color, colorCode, players[] }
+            this.substitutions = {};
             this.playerStats = {};   // playerName -> { team, kills, deaths, finalKills, bedBreaks, eliminated, placement }
             this.activityLog = [];
             this.eliminationOrder = [];
@@ -62,18 +63,35 @@
 
         // ---- team helpers -------------------------------------------------
         findPlayerTeam(playerName) {
+            const canonicalPlayer = this.resolveCanonicalPlayer(playerName);
+
             for (const [teamName, data] of Object.entries(this.teams)) {
-                if (data.players && data.players.includes(playerName)) return teamName;
+                if (
+                    data.players &&
+                    data.players.includes(canonicalPlayer)
+                ) {
+                    return teamName;
+                }
             }
+
             return null;
         }
 
         allPlayerNames() {
             const names = [];
+
             for (const data of Object.values(this.teams)) {
                 if (data.players) names.push(...data.players);
             }
-            return names;
+
+            // Subs must also be detectable in chat logs.
+            names.push(...Object.keys(this.substitutions || {}));
+
+            return [...new Set(names)];
+        }
+
+        resolveCanonicalPlayer(playerName) {
+            return this.substitutions[playerName] || playerName;
         }
 
         /**
@@ -101,15 +119,23 @@
         }
 
         getOrCreatePlayerStats(playerName, teamName) {
-            if (!this.playerStats[playerName]) {
-                this.playerStats[playerName] = {
-                    team: teamName, kills: 0, deaths: 0, finalKills: 0,
-                    bedBreaks: 0, eliminated: false, placement: null
+            const canonicalPlayer = this.resolveCanonicalPlayer(playerName);
+
+            if (!this.playerStats[canonicalPlayer]) {
+                this.playerStats[canonicalPlayer] = {
+                    team: teamName,
+                    kills: 0,
+                    deaths: 0,
+                    finalKills: 0,
+                    bedBreaks: 0,
+                    eliminated: false,
+                    placement: null
                 };
             } else if (teamName) {
-                this.playerStats[playerName].team = teamName;
+                this.playerStats[canonicalPlayer].team = teamName;
             }
-            return this.playerStats[playerName];
+
+            return this.playerStats[canonicalPlayer];
         }
 
         ensureScore(teamName) {
@@ -150,6 +176,7 @@
                 currentGame: clone(this.currentGame),
                 gameHistory: clone(this.gameHistory),
                 teams: clone(this.teams),
+                substitutions: clone(this.substitutions),
                 activityLog: clone(this.activityLog),
                 playerStats: clone(this.playerStats),
                 scores: clone(this.scores),
@@ -164,6 +191,7 @@
             this.currentGame = clone(s.currentGame);
             this.gameHistory = clone(s.gameHistory);
             this.teams = clone(s.teams);
+            this.substitutions = clone(s.substitutions || {});
             this.activityLog = clone(s.activityLog);
             this.playerStats = clone(s.playerStats);
             this.scores = clone(s.scores);
@@ -219,6 +247,7 @@
         serialize(extra = {}) {
             return Object.assign({
                 teams: this.teams,
+                substitutions: this.substitutions,
                 currentGame: this.currentGame,
                 scores: this.scores,
                 playerStats: this.playerStats,
@@ -244,6 +273,13 @@
             if (Array.isArray(data.gameHistory)) this.gameHistory = data.gameHistory;
             if (data.playersFinished) this.playersFinished = data.playersFinished;
             if (data.teamsFullyFinished) this.teamsFullyFinished = data.teamsFullyFinished;
+            if (
+                data.substitutions &&
+                typeof data.substitutions === 'object' &&
+                !Array.isArray(data.substitutions)
+            ) {
+                this.substitutions = data.substitutions;
+            }
             this.undoStack = Array.isArray(data.undoStack) ? data.undoStack : [];
             this.redoStack = Array.isArray(data.redoStack) ? data.redoStack : [];
             if (data.gamemode) this.gamemode = data.gamemode;
@@ -251,26 +287,60 @@
 
         loadFromStorage() {
             if (typeof localStorage === 'undefined') return;
-            const savedTeams = localStorage.getItem('hive_teams');
-            if (savedTeams) {
-                try { this.teams = JSON.parse(savedTeams); } catch (e) { console.error('teams load', e); }
+
+            const savedSubs = localStorage.getItem('hive_substitutions');
+
+            if (savedSubs) {
+                try {
+                    this.substitutions = JSON.parse(savedSubs);
+                } catch (e) {
+                    console.error('substitutions load', e);
+                }
             }
+
+            const savedTeams = localStorage.getItem('hive_teams');
+
+            if (savedTeams) {
+                try {
+                    this.teams = JSON.parse(savedTeams);
+                } catch (e) {
+                    console.error('teams load', e);
+                }
+            }
+
             try {
                 const eventData = localStorage.getItem('hive_event_data');
-                if (eventData) this.applyData(JSON.parse(eventData), { includeTeams: false });
+
+                if (eventData) {
+                    this.applyData(
+                        JSON.parse(eventData),
+                        { includeTeams: false }
+                    );
+                }
+
                 const history = localStorage.getItem('hive_game_history');
+
                 if (history) {
                     const parsed = JSON.parse(history);
-                    if (Array.isArray(parsed)) this.gameHistory = parsed;
+
+                    if (Array.isArray(parsed)) {
+                        this.gameHistory = parsed;
+                    }
                 }
             } catch (e) {
                 console.error('Error loading persistent data:', e);
-                this.gameHistory = []; this.undoStack = []; this.redoStack = [];
+                this.gameHistory = [];
+                this.undoStack = [];
+                this.redoStack = [];
             }
         }
 
         syncToStorage() {
             if (typeof localStorage === 'undefined') return;
+            localStorage.setItem(
+                'hive_substitutions',
+                JSON.stringify(this.substitutions)
+            );
             localStorage.setItem('hive_teams', JSON.stringify(this.teams));
             localStorage.setItem('hive_game_history', JSON.stringify(this.gameHistory));
             localStorage.setItem('hive_event_data', JSON.stringify(this.serialize()));
@@ -278,7 +348,15 @@
 
         saveTeams() {
             if (typeof localStorage !== 'undefined') {
-                localStorage.setItem('hive_teams', JSON.stringify(this.teams));
+                localStorage.setItem(
+                    'hive_teams',
+                    JSON.stringify(this.teams)
+                );
+
+                localStorage.setItem(
+                    'hive_substitutions',
+                    JSON.stringify(this.substitutions)
+                );
             }
         }
 

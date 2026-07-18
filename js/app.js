@@ -318,6 +318,93 @@
             this.teamsView.render(); this.updateUI();
         }
 
+        addSubstitution(subName, originalPlayer) {
+            subName = String(subName || '').trim();
+            originalPlayer = String(originalPlayer || '').trim();
+
+            if (!subName || !originalPlayer) return;
+
+            // Do not allow a rostered player to also be used as a substitute alias.
+            if (this.state.findPlayerTeam(subName) && !this.state.substitutions[subName]) {
+                H.Toast.show(
+                    `${subName} is already a rostered player.`,
+                    { title: 'Cannot add sub', type: 'warning' }
+                );
+                return;
+            }
+
+            // Do not allow someone to sub for themselves.
+            if (subName === originalPlayer) {
+                H.Toast.show(
+                    'A player cannot substitute for themselves.',
+                    { title: 'Cannot add sub', type: 'warning' }
+                );
+                return;
+            }
+
+            this.state.pushUndo('addSubstitution');
+
+            this.state.substitutions[subName] = originalPlayer;
+
+            this.state.saveTeams();
+            this.state.syncToStorage();
+
+            this.state.addLog(
+                `${subName} is now substituting for ${originalPlayer}`,
+                'success'
+            );
+
+            this.teamsView.render();
+        }
+
+        changeSubstitution(subName, originalPlayer) {
+            subName = String(subName || '').trim();
+            originalPlayer = String(originalPlayer || '').trim();
+
+            if (!subName || !originalPlayer) return;
+            if (!this.state.substitutions[subName]) return;
+
+            const previousPlayer = this.state.substitutions[subName];
+
+            if (previousPlayer === originalPlayer) return;
+
+            this.state.pushUndo('changeSubstitution');
+
+            this.state.substitutions[subName] = originalPlayer;
+
+            this.state.saveTeams();
+            this.state.syncToStorage();
+
+            this.state.addLog(
+                `${subName} changed from substituting for ${previousPlayer} to ${originalPlayer}`,
+                'info'
+            );
+
+            this.teamsView.render();
+        }
+
+        removeSubstitution(subName) {
+            subName = String(subName || '').trim();
+
+            if (!subName || !this.state.substitutions[subName]) return;
+
+            const originalPlayer = this.state.substitutions[subName];
+
+            this.state.pushUndo('removeSubstitution');
+
+            delete this.state.substitutions[subName];
+
+            this.state.saveTeams();
+            this.state.syncToStorage();
+
+            this.state.addLog(
+                `${subName} is no longer substituting for ${originalPlayer}`,
+                'warning'
+            );
+
+            this.teamsView.render();
+        }
+
         removePlayerFromAllTeams(name) {
             for (const team of Object.keys(this.state.teams)) {
                 const i = this.state.teams[team].players.indexOf(name);

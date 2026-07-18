@@ -53,25 +53,44 @@
             // "FINAL KILL! <killer> eliminated <victim>"
             const m = clean.match(/FINAL KILL!?\s+(.+?)\s+eliminated\s+(.+?)\s*$/i);
             if (!m) return false;
-            const killer = m[1].trim();
-            const victim = m[2].trim();
+
+            const killerRaw = m[1].trim();
+            const victimRaw = m[2].trim();
+
+            const killer = this.state.resolveCanonicalPlayer(killerRaw);
+            const victim = this.state.resolveCanonicalPlayer(victimRaw);
+
             const killerTeam = this.resolvePlayerTeam(killer);
             const victimTeam = this.resolvePlayerTeam(victim);
+
             if (killerTeam) {
                 const ks = this.state.getOrCreatePlayerStats(killer, killerTeam);
-                ks.kills++; ks.finalKills++;
+
+                ks.kills++;
+                ks.finalKills++;
+
                 this.engine.awardPoints(killerTeam, 'Kill');
                 this.awardFirstBlood(killer, killerTeam);
+
                 this.state.ensureScore(killerTeam).kills.push({
-                    player: killer, victim, time: new Date().toISOString()
+                    player: killer,
+                    victim,
+                    time: new Date().toISOString()
                 });
             }
+
             if (victimTeam) {
                 const vs = this.state.getOrCreatePlayerStats(victim, victimTeam);
+
                 vs.deaths++;
                 this.markEliminated(victim, victimTeam);
             }
-            this.state.addLog(`FINAL KILL: ${killer} eliminated ${victim}`, 'success');
+
+            this.state.addLog(
+                `FINAL KILL: ${killerRaw} eliminated ${victimRaw}`,
+                'success'
+            );
+
             return true;
         }
 
@@ -81,19 +100,30 @@
             // player stats stay accurate, but skip the kill credit for the local player.
             let m = clean.match(/»?\s*You killed\s+(.+?)\s*$/i);
             if (m) {
-                const victim = m[1].trim();
+                const victimRaw = m[1].trim();
+                const victim = this.state.resolveCanonicalPlayer(victimRaw);
+
                 const victimTeam = this.resolvePlayerTeam(victim);
+
                 if (victimTeam) {
-                    this.state.getOrCreatePlayerStats(victim, victimTeam).deaths++;
+                    this.state.getOrCreatePlayerStats(
+                        victim,
+                        victimTeam
+                    ).deaths++;
                 }
                 return true;
             }
             // "You were killed by <killer>" — regular kill against local player; no kill pt to killer.
             m = clean.match(/»?\s*You were killed by\s+(.+?)\.?\s*$/i);
             if (m) {
-                const victim = this.resolvePlayerName('You');
-                if (!victim) return false;
-                const victimTeam = this.resolvePlayerTeam(victim);
+                const victimRaw = this.resolvePlayerName('You');
+                if (!victimRaw) return false;
+
+                const victim =
+                    this.state.resolveCanonicalPlayer(victimRaw);
+
+                const victimTeam =
+                    this.resolvePlayerTeam(victim);
                 if (victimTeam) this.state.getOrCreatePlayerStats(victim, victimTeam).deaths++;
                 return true;
             }
@@ -101,23 +131,63 @@
         }
 
         detectBedBreak(clean) {
-            // "<breaker> destroyed <team>'s bed" or "Your bed was destroyed by <breaker>"
-            let breaker = null;
-            let m = clean.match(/»?\s*(.+?)\s+destroyed\s+(.+?)['’]?s?\s+bed/i);
-            if (m) breaker = m[1].trim();
-            if (!breaker) {
-                m = clean.match(/»?\s*Your bed was destroyed by\s+(.+?)\s*$/i);
-                if (m) breaker = m[1].trim();
-            }
-            if (!breaker) return false;
+            // "<breaker> destroyed <team>'s bed"
+            // or "Your bed was destroyed by <breaker>"
+            let breakerRaw = null;
 
-            const team = this.resolvePlayerTeam(breaker);
+            let m = clean.match(
+                /»?\s*(.+?)\s+destroyed\s+(.+?)['’]?s?\s+bed/i
+            );
+
+            if (m) {
+                breakerRaw = m[1].trim();
+            }
+
+            if (!breakerRaw) {
+                m = clean.match(
+                    /»?\s*Your bed was destroyed by\s+(.+?)\s*$/i
+                );
+
+                if (m) {
+                    breakerRaw = m[1].trim();
+                }
+            }
+
+            if (!breakerRaw) return false;
+
+            const breaker =
+                this.state.resolveCanonicalPlayer(breakerRaw);
+
+            const team =
+                this.resolvePlayerTeam(breaker);
+
             if (!team) return false;
-            const ps = this.state.getOrCreatePlayerStats(breaker, team);
+
+            const ps =
+                this.state.getOrCreatePlayerStats(
+                    breaker,
+                    team
+                );
+
             ps.bedBreaks++;
-            this.engine.awardPoints(team, 'Bed Break');
-            this.state.ensureScore(team).bedBreaks.push({ player: breaker, time: new Date().toISOString() });
-            this.state.addLog(`${team} - ${breaker} broke a bed`, 'success');
+
+            this.engine.awardPoints(
+                team,
+                'Bed Break'
+            );
+
+            this.state.ensureScore(team).bedBreaks.push({
+                player: breaker,
+                time: new Date().toISOString()
+            });
+
+            this.state.addLog(
+                breakerRaw === breaker
+                    ? `${team} - ${breaker} broke a bed`
+                    : `${team} - ${breakerRaw} broke a bed for ${breaker}`,
+                'success'
+            );
+
             return true;
         }
 
