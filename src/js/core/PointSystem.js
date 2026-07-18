@@ -12,9 +12,8 @@
     function defaultPointSystems() {
         return {
             'DeathRun': { '1st place': 4, '2nd place': 3, '3rd place': 2, '4th place': 1, '5th place': 1, 'First full team finish': 1, 'Second full team finish': 0, 'Third full team finish': 0 },
-            'SkyWars': { '1st place': 4, '2nd place': 3, '3rd place': 2, 'Kill': 1, 'Kill Leader': 0 },
-            'Survival Games': { '1st place': 4, '2nd place': 3, '3rd place': 2, 'Kill': 1 },
-            'BedWars': { '1st place': 4, '2nd place': 3, '3rd place': 2, 'Kill': 1, 'Bed Break': 1 },
+            'Survival Games': { '1st place': 4, '2nd place': 3, '3rd place': 2, 'Kill': 1, 'First Blood': 0 },
+            'BedWars': { '1st place': 4, '2nd place': 3, '3rd place': 2, 'Kill': 1, 'Bed Break': 1, 'First Blood': 0 },
             'Gravity': { '1st place': 4, '2nd place': 3, '3rd place': 2, '4th place': 1, '5th place': 1, 'First full team finish': 1, 'Second full team finish': 0, 'Third full team finish': 0 },
             'BlockDrop': { '1st place': 4, '2nd place': 3, '3rd place': 2, '4th place': 1, '5th place': 1, 'Last team standing': 1, 'Second last team standing': 0, 'Third last team standing': 0 },
             'Block Party': { '1st place': 4, '2nd place': 3, '3rd place': 2, '4th place': 1, '5th place': 1, 'Last team standing': 1, 'Second last team standing': 0, 'Third last team standing': 0 }
@@ -28,9 +27,9 @@
     function defaultFeatures() {
         return {
             'DeathRun': { kills: false, bedBreaks: false, individualFinish: true, teamFinish: true, individualSurvival: false, teamElimination: false },
-            'SkyWars': { kills: true, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: true, teamElimination: false },
-            'Survival Games': { kills: true, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: true, teamElimination: false },
-            'BedWars': { kills: true, bedBreaks: true, individualFinish: false, teamFinish: false, individualSurvival: true, teamElimination: false },
+            'SkyWars': { kills: true, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: false, teamElimination: true, pvp: true },
+            'Survival Games': { kills: true, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: false, teamElimination: true, pvp: true },
+            'BedWars': { kills: true, bedBreaks: true, individualFinish: false, teamFinish: false, individualSurvival: false, teamElimination: true, pvp: true },
             'Gravity': { kills: false, bedBreaks: false, individualFinish: true, teamFinish: true, individualSurvival: false, teamElimination: false },
             'BlockDrop': { kills: false, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: true, teamElimination: false },
             'Block Party': { kills: false, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: true, teamElimination: false }
@@ -60,6 +59,9 @@
             this.autoAddUnknownPlayers = true;
             this.enableKillLeader = false;
             this.enableExtendedTeamBonuses = false;
+            this.enableSoloPlacements = false;
+            this.enableChestPoints = false;
+            this.blockPartyTieMode = 'shared-first';
             this.STORAGE_KEY = 'hive_settings';
         }
 
@@ -87,6 +89,11 @@
                 if (typeof settings.autoAddUnknownPlayers === 'boolean') this.autoAddUnknownPlayers = settings.autoAddUnknownPlayers;
                 if (typeof settings.enableKillLeader === 'boolean') this.enableKillLeader = settings.enableKillLeader;
                 if (typeof settings.enableExtendedTeamBonuses === 'boolean') this.enableExtendedTeamBonuses = settings.enableExtendedTeamBonuses;
+                if (typeof settings.enableSoloPlacements === 'boolean') this.enableSoloPlacements = settings.enableSoloPlacements;
+                if (typeof settings.enableChestPoints === 'boolean') this.enableChestPoints = settings.enableChestPoints;
+                if (settings.blockPartyTieMode === 'shared-first' || settings.blockPartyTieMode === 'shared-placement') {
+                    this.blockPartyTieMode = settings.blockPartyTieMode;
+                }
             } catch (err) {
                 console.error('Error loading settings:', err);
                 this.reset();
@@ -105,7 +112,10 @@
                 myIgn: this.myIgn,
                 autoAddUnknownPlayers: this.autoAddUnknownPlayers,
                 enableKillLeader: this.enableKillLeader,
-                enableExtendedTeamBonuses: this.enableExtendedTeamBonuses
+                enableExtendedTeamBonuses: this.enableExtendedTeamBonuses,
+                enableSoloPlacements: this.enableSoloPlacements,
+                enableChestPoints: this.enableChestPoints,
+                blockPartyTieMode: this.blockPartyTieMode
             };
             if (typeof localStorage !== 'undefined') {
                 localStorage.setItem(this.STORAGE_KEY, JSON.stringify(settings));
@@ -124,6 +134,9 @@
             this.autoAddUnknownPlayers = true;
             this.enableKillLeader = false;
             this.enableExtendedTeamBonuses = false;
+            this.enableSoloPlacements = false;
+            this.enableChestPoints = false;
+            this.blockPartyTieMode = 'shared-first';
             this.save();
         }
 
@@ -140,6 +153,11 @@
             if (typeof settings.autoAddUnknownPlayers === 'boolean') this.autoAddUnknownPlayers = settings.autoAddUnknownPlayers;
             if (typeof settings.enableKillLeader === 'boolean') this.enableKillLeader = settings.enableKillLeader;
             if (typeof settings.enableExtendedTeamBonuses === 'boolean') this.enableExtendedTeamBonuses = settings.enableExtendedTeamBonuses;
+            if (typeof settings.enableSoloPlacements === 'boolean') this.enableSoloPlacements = settings.enableSoloPlacements;
+            if (typeof settings.enableChestPoints === 'boolean') this.enableChestPoints = settings.enableChestPoints;
+            if (settings.blockPartyTieMode === 'shared-first' || settings.blockPartyTieMode === 'shared-placement') {
+                this.blockPartyTieMode = settings.blockPartyTieMode;
+            }
             this.save();
         }
 
@@ -179,7 +197,10 @@
                 myIgn: this.myIgn,
                 autoAddUnknownPlayers: this.autoAddUnknownPlayers,
                 enableKillLeader: this.enableKillLeader,
-                enableExtendedTeamBonuses: this.enableExtendedTeamBonuses
+                enableExtendedTeamBonuses: this.enableExtendedTeamBonuses,
+                enableSoloPlacements: this.enableSoloPlacements,
+                enableChestPoints: this.enableChestPoints,
+                blockPartyTieMode: this.blockPartyTieMode
             };
         }
 
@@ -194,11 +215,17 @@
 
         /**
          * Feature flags for a gamemode, tolerant of spacing/case differences.
+         * PvP modes switch between team and solo placements via enableSoloPlacements.
          * @param {string} gamemode Gamemode name.
          * @returns {Object|null} Feature flags or null.
          */
         featuresFor(gamemode) {
-            return PointSystem.tolerantLookup(this.gamemodeFeatures, gamemode);
+            const features = PointSystem.tolerantLookup(this.gamemodeFeatures, gamemode);
+            if (!features || !features.pvp) return features;
+            return Object.assign({}, features, {
+                individualSurvival: this.enableSoloPlacements,
+                teamElimination: !this.enableSoloPlacements
+            });
         }
 
         /**

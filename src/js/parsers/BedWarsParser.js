@@ -1,6 +1,7 @@
 /**
- * BedWarsParser - team mode with final kills and bed breaks. Regular kills
- * respawn the victim and never score; only "FINAL KILL!" lines award points.
+ * BedWarsParser - team mode with final kills. Regular kills respawn the victim
+ * and never score; only "FINAL KILL!" lines award points. Bed breaks are added
+ * manually by the host (the log only shows breaks against the log user's bed).
  */
 (function (global) {
     'use strict';
@@ -18,7 +19,6 @@
             if (this.detectFinalKill(clean)) return true;
             if (this.detectLocalElimination(clean)) return true;
             if (this.detectFirstPersonKill(clean)) return true;
-            // if (this.detectBedBreak(clean)) return true;
             if (this.detectWinner(clean)) return true;
             if (this.detectTeamElimination(clean)) return true;
             return false;
@@ -54,20 +54,23 @@
             const victim = m[2].trim();
             const killerTeam = this.resolvePlayerTeam(killer);
             const victimTeam = this.resolvePlayerTeam(victim);
+            const canonicalKiller = this.state.resolveCanonicalPlayer(killer);
+            const canonicalVictim = this.state.resolveCanonicalPlayer(victim);
             if (killerTeam) {
-                const ks = this.state.getOrCreatePlayerStats(killer, killerTeam);
+                const ks = this.state.getOrCreatePlayerStats(canonicalKiller, killerTeam);
                 ks.kills++; ks.finalKills++;
                 this.engine.awardPoints(killerTeam, 'Kill');
                 this.state.ensureScore(killerTeam).kills.push({
-                    player: killer, victim, time: new Date().toISOString()
+                    player: canonicalKiller, victim: canonicalVictim, time: new Date().toISOString()
                 });
+                this.awardFirstBlood(canonicalKiller, killerTeam);
             }
             if (victimTeam) {
-                const vs = this.state.getOrCreatePlayerStats(victim, victimTeam);
+                const vs = this.state.getOrCreatePlayerStats(canonicalVictim, victimTeam);
                 vs.deaths++;
-                this.markEliminated(victim, victimTeam);
+                this.markEliminated(canonicalVictim, victimTeam);
             }
-            this.state.addLog(`FINAL KILL: ${killer} eliminated ${victim}`, 'success');
+            this.state.addLog(`FINAL KILL: ${this.subLabel(killer, canonicalKiller)} eliminated ${this.subLabel(victim, canonicalVictim)}`, 'success');
             return true;
         }
 
@@ -95,31 +98,6 @@
                 return true;
             }
             return false;
-        }
-
-        /**
-         * Bed break lines in either direction.
-         * @param {string} clean Stripped chat line.
-         * @returns {boolean} True when handled.
-         */
-        detectBedBreak(clean) {
-            let breaker = null;
-            let m = clean.match(/»?\s*(.+?)\s+destroyed\s+(.+?)['’]?s?\s+bed/i);
-            if (m) breaker = m[1].trim();
-            if (!breaker) {
-                m = clean.match(/»?\s*Your bed was destroyed by\s+(.+?)\s*$/i);
-                if (m) breaker = m[1].trim();
-            }
-            if (!breaker) return false;
-
-            const team = this.resolvePlayerTeam(breaker);
-            if (!team) return false;
-            const ps = this.state.getOrCreatePlayerStats(breaker, team);
-            ps.bedBreaks++;
-            this.engine.awardPoints(team, 'Bed Break');
-            this.state.ensureScore(team).bedBreaks.push({ player: breaker, time: new Date().toISOString() });
-            this.state.addLog(`${team} - ${breaker} broke a bed`, 'success');
-            return true;
         }
 
         /**

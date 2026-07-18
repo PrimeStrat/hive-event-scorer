@@ -22,6 +22,10 @@
                 }
                 return false;
             }
+            const chest = clean.match(/»?\s*The Mystery Chest was opened by\s+(.+?)\s*$/i);
+            if (chest) {
+                return this.recordChestOpen(chest[1].trim());
+            }
             if (this.isNoise(clean)) return false;
             if (this.detectWinner(clean)) {
                 this.awardKillLeader();
@@ -45,6 +49,24 @@
                 /wasn't very lucky/i.test(clean) ||
                 /minimum play height/i.test(clean) ||
                 /Your tracking compass is pointing to/i.test(clean);
+        }
+
+        /**
+         * Award Mystery Chest points to the opener's team; requires the misc toggle.
+         * @param {string} openerName Player who opened the chest.
+         * @returns {boolean} True when points were awarded.
+         */
+        recordChestOpen(openerName) {
+            if (!this.points.enableChestPoints || !openerName) return false;
+            const teamName = this.state.findPlayerTeam(openerName);
+            if (!this.engine.isScorableTeam(teamName)) return false;
+            const canonical = this.state.resolveCanonicalPlayer(openerName);
+            const pts = this.engine.awardPoints(teamName, 'Mystery Chest');
+            const score = this.state.ensureScore(teamName);
+            const event = score.events[score.events.length - 1];
+            if (event && event.type === 'Mystery Chest') event.player = canonical;
+            this.state.addLog(`${this.subLabel(openerName, canonical)} opened the Mystery Chest${pts ? ` (+${pts})` : ''}`, 'info');
+            return true;
         }
 
         /**
