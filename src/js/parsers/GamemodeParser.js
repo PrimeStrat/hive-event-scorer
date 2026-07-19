@@ -30,7 +30,7 @@
         }
 
         get selfDeathPhrases() {
-            return ['did an oopsie', 'you died', 'forgot their parachute', 'fell off',
+            return ['themselves', 'did an oopsie', 'you died', 'forgot their parachute', 'fell off',
                 'fell to their demise', 'said goodbye to this cruel world', "got ratio'd",
                 'made their last dance move', "ain't stayin' alive", 'has two left feet',
                 "rock 'n' rolled into the void"];
@@ -129,8 +129,15 @@
                 return this.recordKill(killer, victim);
             }
             if (players.length === 1) {
+                const name = players[0];
+                // Self-kill broadcasts name the player twice ("X was slain by X").
+                const first = ChatUtils.indexOfName(clean, name);
+                const rest = clean.slice(first + name.length);
+                if (ChatUtils.indexOfName(rest, name) !== -1) {
+                    return this.recordDeath(name);
+                }
                 if (this.selfDeathPhrases.some(p => lower.includes(p))) {
-                    return this.recordDeath(players[0]);
+                    return this.recordDeath(name);
                 }
             }
             return false;
@@ -223,10 +230,11 @@
          * @returns {string} 'kill'.
          */
         recordKill(killerName, victimName) {
-            const killerTeam = this.resolvePlayerTeam(killerName);
-            const victimTeam = this.resolvePlayerTeam(victimName);
             const canonicalKiller = this.state.resolveCanonicalPlayer(killerName);
             const canonicalVictim = this.state.resolveCanonicalPlayer(victimName);
+            if (canonicalKiller === canonicalVictim) return this.recordDeath(victimName);
+            const killerTeam = this.resolvePlayerTeam(killerName);
+            const victimTeam = this.resolvePlayerTeam(victimName);
             if (killerTeam) {
                 const ks = this.state.getOrCreatePlayerStats(canonicalKiller, killerTeam);
                 ks.kills++;
