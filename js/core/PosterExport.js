@@ -1,12 +1,5 @@
 /**
- * PosterExport - draws two shareable PNG "posters" on a <canvas> and downloads
- * them. No external dependencies; works offline from file://.
- *
- *  1) Player standings  - every player ranked by total event points.
- *  2) Event winners     - the team leaderboard with the champion highlighted.
- *
- * Callers pass already-aggregated data (see StatsRenderer.aggregate*), so this
- * module owns presentation only, not scoring.
+ * PosterExport - draws shareable PNG posters on a canvas and downloads them.
  */
 (function (global) {
     'use strict';
@@ -23,15 +16,39 @@
         muted: '#8B83A6'
     };
 
+    /**
+     * Save a canvas as a PNG: native save dialog on desktop, download otherwise.
+     * @param {HTMLCanvasElement} canvas Canvas to save.
+     * @param {string} filename Suggested file name.
+     * @returns {void}
+     */
     function dl(canvas, filename) {
-        canvas.toBlob(blob => {
+        canvas.toBlob(async blob => {
+            const bridge = (typeof window !== 'undefined') && window.hiveDesktop;
+            const Toast = global.Hive && global.Hive.Toast;
+            if (bridge && bridge.saveImage) {
+                const bytes = new Uint8Array(await blob.arrayBuffer());
+                const res = await bridge.saveImage(filename, bytes);
+                if (Toast && res.ok) Toast.show(`Saved to ${res.path}`, { title: 'Exported', duration: 6000 });
+                else if (Toast && !res.canceled) Toast.show('Could not save the image.', { title: 'Export failed', type: 'warning' });
+                return;
+            }
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url; a.download = filename; a.click();
             URL.revokeObjectURL(url);
+            if (Toast) Toast.show('Poster downloaded.', { title: 'Exported', duration: 3500 });
         }, 'image/png');
     }
 
+    /**
+     * Draw the poster title bar.
+     * @param {CanvasRenderingContext2D} ctx Canvas context.
+     * @param {number} w Canvas width.
+     * @param {string} title Main title.
+     * @param {string} subtitle Subtitle line.
+     * @returns {void}
+     */
     function header(ctx, w, title, subtitle) {
         ctx.fillStyle = C.purple;
         ctx.fillRect(0, 0, w, 8);
@@ -44,21 +61,35 @@
         ctx.fillText(subtitle, 48, 110);
     }
 
+    /**
+     * Draw the poster footer with branding and timestamp.
+     * @param {CanvasRenderingContext2D} ctx Canvas context.
+     * @param {number} w Canvas width.
+     * @param {number} h Canvas height.
+     * @returns {void}
+     */
     function footer(ctx, w, h) {
         ctx.fillStyle = C.muted;
         ctx.font = '400 15px Inter, Segoe UI, sans-serif';
-        ctx.fillText('Hive Event Scorer  •  Not affiliated with The Hive', 48, h - 28);
+        ctx.fillText('Hive Event Scorer | Not affiliated with The Hive', 48, h - 28);
         const stamp = new Date().toLocaleString();
         const tw = ctx.measureText(stamp).width;
         ctx.fillText(stamp, w - 48 - tw, h - 28);
     }
 
+    /**
+     * Medal color for a rank index.
+     * @param {number} i Zero-based rank.
+     * @returns {string|null} Color or null past 3rd.
+     */
     function medal(i) { return i === 0 ? '#FACC15' : i === 1 ? '#C7C1DC' : i === 2 ? '#F59E0B' : null; }
 
     const PosterExport = {
         /**
-         * @param {Array<{name,team,teamColor,points}>} players  sorted desc by points
-         * @param {string} eventTitle
+         * Draw and download the player-standings poster.
+         * @param {Array<{name: string, team: string, teamColor: string, points: number}>} players Sorted desc by points.
+         * @param {string} eventTitle Poster title.
+         * @returns {void}
          */
         playerStandings(players, eventTitle = 'Event Standings') {
             const top = 150, rowH = 46, pad = 48;
@@ -69,13 +100,12 @@
             const ctx = canvas.getContext('2d');
 
             ctx.fillStyle = C.bg; ctx.fillRect(0, 0, w, h);
-            header(ctx, w, eventTitle, 'Player Standings — total points');
+            header(ctx, w, eventTitle, 'Player Standings - total points');
 
             players.forEach((p, i) => {
                 const y = top + i * rowH;
                 ctx.fillStyle = C.row;
                 roundRect(ctx, pad, y, w - pad * 2, rowH - 8, 8); ctx.fill();
-                // team color stripe
                 ctx.fillStyle = p.teamColor || C.purple;
                 ctx.fillRect(pad, y, 6, rowH - 8);
 
@@ -87,12 +117,6 @@
                 ctx.fillStyle = C.text;
                 ctx.font = '600 22px Inter, sans-serif';
                 ctx.fillText(p.name, pad + 90, y + 27);
-
-                if (p.team) {
-                    ctx.fillStyle = C.muted;
-                    ctx.font = '400 16px Inter, sans-serif';
-                    ctx.fillText(p.team, pad + 90, y + 27 + 0); // team appended after name below if room
-                }
 
                 const pts = `${p.points} pts`;
                 ctx.fillStyle = C.yellow;
@@ -111,8 +135,10 @@
         },
 
         /**
-         * @param {Array<{team,teamColor,points,players:Array<{name,points}>}>} teams sorted desc
-         * @param {string} eventTitle
+         * Draw and download the team-winners poster.
+         * @param {Array<{team: string, teamColor: string, points: number, players: Array<{name: string, points: number}>}>} teams Sorted desc by points.
+         * @param {string} eventTitle Poster title.
+         * @returns {void}
          */
         eventWinners(teams, eventTitle = 'Event Champions') {
             const top = 150, pad = 48, w = 900;
@@ -136,7 +162,7 @@
                 const m = medal(i);
                 ctx.fillStyle = m || C.muted;
                 ctx.font = '800 26px Inter, sans-serif';
-                ctx.fillText(i === 0 ? '★ 1st' : `#${i + 1}`, pad + 24, y + 40);
+                ctx.fillText(i === 0 ? '1st' : `#${i + 1}`, pad + 24, y + 40);
 
                 ctx.fillStyle = C.text;
                 ctx.font = '800 26px Inter, sans-serif';
@@ -173,6 +199,16 @@
         }
     };
 
+    /**
+     * Trace a rounded rectangle path.
+     * @param {CanvasRenderingContext2D} ctx Canvas context.
+     * @param {number} x Left.
+     * @param {number} y Top.
+     * @param {number} w Width.
+     * @param {number} h Height.
+     * @param {number} r Corner radius.
+     * @returns {void}
+     */
     function roundRect(ctx, x, y, w, h, r) {
         ctx.beginPath();
         ctx.moveTo(x + r, y);

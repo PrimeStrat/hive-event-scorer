@@ -1,21 +1,23 @@
 /**
- * ScoreboardRenderer - the Scorer tab: quick-stat cards, team scoreboard, and the
- * activity log.
+ * ScoreboardRenderer - the Scorer tab: quick stats, scoreboard, activity log.
  */
 (function (global) {
     'use strict';
     const Base = global.Hive.renderers.Renderer;
 
     class ScoreboardRenderer extends Base {
+        /**
+         * Render the quick-stat cards; UNKNOWN is not a competitor.
+         * @returns {void}
+         */
         renderQuickStats() {
-            // The UNKNOWN bucket isn't a real team, so it's excluded from the team count.
             const teamCount = Object.keys(this.state.teams).filter(t => t !== 'UNKNOWN').length;
             const playerCount = this.loggedPlayerCount();
 
             let placements = '-';
             if (this.state.hasActiveScores()) {
                 const sorted = Object.entries(this.state.scores)
-                    .filter(([t]) => t !== 'UNKNOWN') // holding bucket, not a competitor
+                    .filter(([t]) => t !== 'UNKNOWN')
                     .sort((a, b) => b[1].score - a[1].score)
                     .filter(([, d]) => d.score > 0);
                 if (sorted.length) {
@@ -30,6 +32,10 @@
             const cm = this.$('currentGamemode'); if (cm) cm.textContent = this.state.gamemode || 'None';
         }
 
+        /**
+         * Unique players across rosters and stats.
+         * @returns {number} Player count.
+         */
         loggedPlayerCount() {
             const set = new Set();
             Object.values(this.state.teams).forEach(t => (t.players || []).forEach(p => set.add(p)));
@@ -37,6 +43,10 @@
             return set.size;
         }
 
+        /**
+         * Render the live team scoreboard.
+         * @returns {void}
+         */
         renderScoreboard() {
             const board = this.$('scoreboard');
             if (!board) return;
@@ -45,7 +55,7 @@
                 return;
             }
             const sorted = Object.entries(this.state.scores)
-                .filter(([t]) => t !== 'UNKNOWN') // holding bucket, not a competitor
+                .filter(([t]) => t !== 'UNKNOWN')
                 .sort((a, b) => b[1].score - a[1].score);
             if (!sorted.length) {
                 board.innerHTML = '<p class="empty-state">No team scores yet.</p>';
@@ -66,6 +76,10 @@
             }).join('');
         }
 
+        /**
+         * Render the most recent activity-log entries.
+         * @returns {void}
+         */
         renderActivityLog() {
             const log = this.$('activityLog');
             if (!log) return;
@@ -81,6 +95,10 @@
                 </div>`).join('');
         }
 
+        /**
+         * Render the whole Scorer tab.
+         * @returns {void}
+         */
         renderAll() {
             this.renderQuickStats();
             this.renderScoreboard();

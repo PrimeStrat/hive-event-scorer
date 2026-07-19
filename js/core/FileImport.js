@@ -1,15 +1,9 @@
 /**
- * FileImport - infer a gamemode from a dropped/loaded log file's name.
- *
- * Hosts often save logs named after the gamemode ("bedwars.txt", "skywars 1.txt",
- * "block party.txt", "sg.txt"). We normalise the filename and match it against the
- * configured gamemodes plus a small alias table, so dropping a file can preselect
- * the right gamemode automatically.
+ * FileImport - infer a gamemode from a dropped log file's name.
  */
 (function (global) {
     'use strict';
 
-    // Common shorthand -> canonical gamemode name.
     const ALIASES = {
         sg: 'Survival Games',
         survival: 'Survival Games',
@@ -28,41 +22,41 @@
     };
 
     const FileImport = {
-        /** strip extension, lowercase, drop trailing numbers/spaces/punctuation. */
+        /**
+         * Reduce a filename to its letters for matching.
+         * @param {string} filename File name.
+         * @returns {string} Lowercased letters only.
+         */
         normalize(filename) {
             return String(filename)
-                .replace(/\.[^.]+$/, '')          // drop extension
+                .replace(/\.[^.]+$/, '')
                 .toLowerCase()
-                .replace(/[^a-z]+/g, '');          // keep letters only ("skywars 1" -> "skywars")
+                .replace(/[^a-z]+/g, '');
         },
 
         /**
          * Best-effort gamemode match for a filename.
-         * @param {string} filename
-         * @param {string[]} knownGamemodes  the currently-configured gamemode names
-         * @returns {string|null} a canonical gamemode name or null
+         * @param {string} filename File name.
+         * @param {string[]} knownGamemodes Configured gamemode names.
+         * @returns {string|null} Canonical gamemode name or null.
          */
         inferGamemode(filename, knownGamemodes) {
             const norm = this.normalize(filename);
             if (!norm) return null;
 
-            // 1) exact normalized match against a configured gamemode
             for (const g of knownGamemodes) {
                 if (g.replace(/\s+/g, '').toLowerCase() === norm) return g;
             }
-            // 2) alias table (map to canonical, then confirm it's configured)
             if (ALIASES[norm]) {
                 const canonical = ALIASES[norm];
                 const match = knownGamemodes.find(g =>
                     g.replace(/\s+/g, '').toLowerCase() === canonical.replace(/\s+/g, '').toLowerCase());
                 if (match) return match;
             }
-            // 3) substring: filename contains a configured gamemode (or vice-versa)
             for (const g of knownGamemodes) {
                 const gn = g.replace(/\s+/g, '').toLowerCase();
                 if (norm.includes(gn) || gn.includes(norm)) return g;
             }
-            // 4) substring against alias keys (e.g. "myskywarslog" -> skywars)
             for (const [alias, canonical] of Object.entries(ALIASES)) {
                 if (norm.includes(alias)) {
                     const match = knownGamemodes.find(g =>
@@ -73,6 +67,11 @@
             return null;
         },
 
+        /**
+         * True for a plain-text log file.
+         * @param {File} file Dropped file.
+         * @returns {boolean} Whether it is a .txt/plain file.
+         */
         isTextFile(file) {
             return /\.txt$/i.test(file.name) || file.type === 'text/plain';
         }

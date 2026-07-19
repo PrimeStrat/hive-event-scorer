@@ -1,12 +1,13 @@
 /**
- * Renderer - shared base for the tab renderers. Holds references to the app's
- * state/engine/points and provides DOM-safe HTML escaping + number animation.
- * Renderers are pure view: they read state and write DOM, never mutate scores.
+ * Renderer - shared base for the tab renderers; pure view over app state.
  */
 (function (global) {
     'use strict';
 
     class Renderer {
+        /**
+         * @param {HiveEventScorer} app App controller.
+         */
         constructor(app) {
             this.app = app;
             this.state = app.state;
@@ -14,15 +15,30 @@
             this.points = app.points;
         }
 
+        /**
+         * Escape text for safe HTML interpolation.
+         * @param {*} text Value to escape.
+         * @returns {string} Escaped HTML.
+         */
         escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text == null ? '' : String(text);
             return div.innerHTML;
         }
 
+        /**
+         * Shorthand for document.getElementById.
+         * @param {string} id Element id.
+         * @returns {HTMLElement|null} The element.
+         */
         $(id) { return document.getElementById(id); }
 
-        /** Count up/down to a new value for the quick-stat cards. */
+        /**
+         * Count up/down to a new value for the quick-stat cards.
+         * @param {string} elementId Element id.
+         * @param {number} newValue Target value.
+         * @returns {void}
+         */
         animateNumber(elementId, newValue) {
             const el = this.$(elementId);
             if (!el) return;

@@ -1,79 +1,140 @@
 /**
- * StatsRenderer - the Statistics tab, redesigned for readability.
- *
- * Layout (top -> bottom):
- *   1. Event standings  - team blocks ranked by total points, each listing its
- *      players' totals. Click a player to open a detail modal.
- *   2. All players      - compact "chips" of every player's total, click-through.
- *   3. Game history      - completed games (with inline score editing).
- *
- * The Statistics tab focuses on cumulative event results; the live current game and
- * point record live on the Scorer tab instead.
- *
- * Aggregation helpers (aggregatePlayerScores / aggregateTeamStandings /
- * playerDetail) are shared by the UI, the player modal, and the PNG poster export.
+ * StatsRenderer - the Totals tab (event standings, player totals) and History
+ * tab (completed games with inline score editing).
  */
 (function (global) {
     'use strict';
     const Base = global.Hive.renderers.Renderer;
 
     class StatsRenderer extends Base {
-        constructor(app) {
-            super(app);
-        }
-
+        /**
+         * Render the whole Totals tab.
+         * @returns {void}
+         */
         renderAll() {
             this.renderEventStandings();
             this.renderPlayerTotals();
             this.renderGameHistory();
         }
 
+        /**
+         * Display color for a team.
+         * @param {string} teamName Team name.
+         * @returns {string} CSS color.
+         */
         teamColor(teamName) { return this.state.teams[teamName]?.color || '#7C3AED'; }
 
-        // ================= aggregation (shared) =================
-
         /**
-         * Per-player totals across all completed games. Team scores are split among
-         * the players on that team who appear in the game; the remainder goes to the
-         * highest-contributing players so player sums reconcile with team totals.
-         * Returns { [player]: { totalPoints, byGamemode: {mode: pts} } }.
+         * Per-player totals across all completed games; team points are attributed
+         * so player sums reconcile with team totals.
+         * @returns {Object} Player name to { totalPoints, byGamemode }.
          */
         aggregatePlayerScores() {
             const result = {};
+
             const add = (name, gamemode, pts) => {
-                if (!result[name]) result[name] = { totalPoints: 0, byGamemode: {} };
+                if (!result[name]) {
+                    result[name] = {
+                        totalPoints: 0,
+                        byGamemode: {}
+                    };
+                }
+
                 result[name].totalPoints += pts;
-                result[name].byGamemode[gamemode] = (result[name].byGamemode[gamemode] || 0) + pts;
+
+                result[name].byGamemode[gamemode] =
+                    (result[name].byGamemode[gamemode] || 0) + pts;
             };
 
             for (const game of this.state.gameHistory) {
-                const features = this.points.featuresFor(game.gamemode) || {};
-                // In individual-placement modes each player earns their OWN placement
-                // points (they stack on the team), so attribute them directly. In
-                // team-placement modes (SkyWars / BedWars / Survival Games) the 1st/2nd/3rd
-                // points belong to the whole team, so the total is split across players.
+                for (const [teamName] of Object.entries(game.scores || {})) {
+                    if (teamName === 'UNKNOWN') continue;
 
-                for (const [teamName, teamScore] of Object.entries(game.scores)) {
-                    if (teamName === 'UNKNOWN') continue; // holding bucket, never scores
                     const team = this.state.teams[teamName];
                     if (!team || !team.players) continue;
-                    const players = team.players.filter(p => game.playerStats[p]);
-                    if (players.length === 0) continue;
 
-                    const contrib = name => this.engine.gamePlayerContribution(game, name, game.playerStats[name]);
-                    const ranked = players.slice().sort((a, b) => contrib(b) - contrib(a));
+                    const players = team.players.filter(
+                        player => game.playerStats?.[player]
+                    );
 
-                    for (const name of ranked) {
-                        add(name, game.gamemode, contrib(name));
+                    for (const name of players) {
+                        const pts = this.engine.gamePlayerContribution(
+                            game,
+                            name,
+                            game.playerStats[name]
+                        );
+
+                        add(name, game.gamemode, pts);
                     }
                 }
             }
+
             return result;
         }
 
+        teamPointBreakdown(teamName) {
+            const breakdown = [];
+            let total = 0;
+
+            for (const game of this.state.gameHistory) {
+                const teamScore = game.scores?.[teamName];
+                if (!teamScore) continue;
+
+                const features = this.points.featuresFor(game.gamemode) || {};
+
+                // Only these explicit event types are always team-level bonuses.
+                const teamBonusTypes = new Set([
+                    'First full team finish',
+                    'Second full team finish',
+                    'Third full team finish',
+
+                    'Last team standing',
+                    'Second last team standing',
+                    'Third last team standing'
+                ]);
+
+                for (const event of teamScore.events || []) {
+                    let isTeamEvent = teamBonusTypes.has(event.type);
+
+                    // Placement points are team points only in team-placement modes.
+                    const placementMatch = String(event.type || '').match(
+                        /^(\d+)(?:st|nd|rd|th) place$/i
+                    );
+
+                    if (
+                        placementMatch &&
+                        features.teamElimination &&
+                        !features.individualFinish &&
+                        !features.individualSurvival
+                    ) {
+                        isTeamEvent = true;
+                    }
+
+                    if (!isTeamEvent) continue;
+
+                    const points = Number(event.points || 0);
+
+                    if (points === 0) continue;
+
+                    breakdown.push({
+                        gamemode: game.gamemode,
+                        reason: event.type,
+                        points
+                    });
+
+                    total += points;
+                }
+            }
+
+            return {
+                total,
+                breakdown
+            };
+        }
+
         /**
-         * Team standings for the whole event: each team's cumulative points (sum of
-         * its games) plus its players' totals. Returns an array sorted desc by points.
+         * Cumulative team standings with per-player totals.
+         * @returns {Array<Object>} Sorted desc by points.
          */
         aggregateTeamStandings() {
             const playerScores = this.aggregatePlayerScores();
@@ -86,40 +147,42 @@
             }
             return Object.entries(teams).map(([teamName, points]) => {
                 const roster = this.state.teams[teamName]?.players || [];
-
                 const players = roster
-                    .map(name => ({
-                        name,
-                        points: playerScores[name]
-                            ? playerScores[name].totalPoints
-                            : 0
-                    }))
+                    .map(name => ({ name, points: playerScores[name] ? playerScores[name].totalPoints : 0 }))
                     .sort((a, b) => b.points - a.points);
+                const teamPointData = this.teamPointBreakdown(teamName);
 
                 const playerPoints = players.reduce(
                     (sum, player) => sum + player.points,
                     0
                 );
 
-                const teamPoints = Math.max(0, points - playerPoints);
+                const teamPoints = Math.max(
+                    0,
+                    points - playerPoints
+                );
 
                 return {
                     team: teamName,
                     teamColor: this.teamColor(teamName),
                     points,
                     teamPoints,
+                    teamPointBreakdown: teamPointData.breakdown,
                     players
                 };
             }).sort((a, b) => b.points - a.points);
         }
 
-        /** Flat, ranked list of every registered player's total (for chips + PNG). */
+        /**
+         * Ranked list of every rostered player's total.
+         * @returns {Array<Object>} Sorted desc by points.
+         */
         playerStandingsList() {
             const scores = this.aggregatePlayerScores();
             return Object.entries(scores)
                 .filter(([name]) => {
                     const t = this.state.findPlayerTeam(name);
-                    return t && t !== 'UNKNOWN'; // exclude unrostered / holding-bucket players
+                    return t && t !== 'UNKNOWN';
                 })
                 .map(([name, data]) => {
                     const team = this.state.findPlayerTeam(name);
@@ -128,7 +191,11 @@
                 .sort((a, b) => b.points - a.points);
         }
 
-        /** Everything needed for the player-detail modal, including per-game placements. */
+        /**
+         * Everything needed for the player-detail modal.
+         * @param {string} name Player name.
+         * @returns {Object} Totals plus per-game rows.
+         */
         playerDetail(name) {
             const team = this.state.findPlayerTeam(name);
             const games = [];
@@ -143,33 +210,15 @@
                 totalFinalKills += ps.finalKills || 0;
                 totalBedBreaks += ps.bedBreaks || 0;
                 if (ps.placement === '1st') wins++;
-                const isSkyWars = game.gamemode === 'SkyWars';
-                const killLeader = isSkyWars && Object.values(game.scores || {}).some(score =>
-                    Array.isArray(score.events) &&
-                    score.events.some(event =>
-                        event.type === 'Kill Leader' &&
-                        event.player === name
-                    )
-                );
-
                 games.push({
                     gamemode: game.gamemode,
                     date: game.startTime,
                     points: pts,
-
-                    // Only expose placement as an individual stat in individual-placement modes.
-                    placement: (
-                        this.points.featuresFor(game.gamemode)?.individualFinish ||
-                        this.points.featuresFor(game.gamemode)?.individualSurvival
-                    ) ? (ps.placement || '-') : null,
-
+                    placement: ps.placement || '-',
                     kills: ps.kills || 0,
                     deaths: ps.deaths || 0,
                     finalKills: ps.finalKills || 0,
                     bedBreaks: ps.bedBreaks || 0,
-
-                    killLeader,
-
                     features: this.points.featuresFor(game.gamemode) || {}
                 });
             }
@@ -177,7 +226,10 @@
             return { name, team, teamColor: this.teamColor(team), totalPoints, totalKills, totalFinalKills, totalBedBreaks, wins, games };
         }
 
-        // ================= event standings =================
+        /**
+         * Render the event standings section.
+         * @returns {void}
+         */
         renderEventStandings() {
             const host = this.$('eventStandings');
             if (!host) return;
@@ -193,11 +245,23 @@
             host.innerHTML = standings.map((t, i) => `
                 <div class="standings-team" style="--team-color:${t.teamColor}">
                     <div class="standings-team-head">
-                        <span class="standings-rank">${i === 0 ? '★ 1st' : '#' + (i + 1)}</span>
+                        <span class="standings-rank">${i === 0 ? '1st' : '#' + (i + 1)}</span>
                         <span class="standings-team-name">${this.escapeHtml(t.team)}</span>
                         <span class="standings-team-total">${t.points} pts</span>
                     </div>
                     <div class="standings-players">
+                        ${t.teamPoints > 0 ? `
+                            <div
+                                class="standings-player standings-team-points"
+                                data-team-points="${this.escapeHtml(t.team)}"
+                                tabindex="0"
+                                role="button"
+                            >
+                                <span class="pname">Team Points</span>
+                                <span class="ppts">${t.teamPoints}</span>
+                            </div>
+                        ` : ''}
+
                         ${t.players.map(p => `
                             <div class="standings-player" data-player="${this.escapeHtml(p.name)}">
                                 <span class="pname">${this.escapeHtml(p.name)}</span>
@@ -205,19 +269,75 @@
                             </div>
                         `).join('')}
 
-                        ${t.teamPoints > 0 ? `
-                            <div class="standings-player standings-team-points">
-                                <span class="pname">Team Points</span>
-                                <span class="ppts">${t.teamPoints}</span>
-                            </div>
-                        ` : ''}
                     </div>
                 </div>`).join('');
 
             this.attachPlayerClicks(host);
+            host.querySelectorAll('[data-team-points]').forEach(el => {
+                el.addEventListener('click', () => {
+                    const teamName = el.dataset.teamPoints;
+                    const team = standings.find(t => t.team === teamName);
+
+                    if (team) {
+                        this.openTeamPointsModal(team);
+                    }
+                });
+            });
         }
 
-        // ================= compact all-players list =================
+        openTeamPointsModal(team) {
+            if (!team) return;
+
+            const modal = document.getElementById('teamPointsModal');
+            const title = document.getElementById('teamPointsModalTitle');
+            const body = document.getElementById('teamPointsModalBody');
+
+            if (!modal || !title || !body) return;
+
+            title.textContent =
+                `${team.team} — Team Points (${team.teamPoints})`;
+
+            if (!team.teamPointBreakdown?.length) {
+                body.innerHTML =
+                    '<p class="empty-state">No team-point details available.</p>';
+
+                modal.classList.add('open');
+                return;
+            }
+
+            body.innerHTML = `
+                <div class="team-points-breakdown">
+                    ${team.teamPointBreakdown.map(item => `
+                        <div class="pd-game">
+                            <div class="pd-game-head">
+                                <span>
+                                    ${this.escapeHtml(item.gamemode)}
+                                </span>
+
+                                <span>
+                                    +${item.points} pts
+                                </span>
+                            </div>
+
+                            <div class="pd-game-stats">
+                                <span>
+                                    ${this.escapeHtml(item.reason)}
+                                </span>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+
+            modal.setAttribute('aria-hidden', 'false');
+            modal.classList.add('open');
+            return;
+        }
+
+        /**
+         * Render the compact all-players list.
+         * @returns {void}
+         */
         renderPlayerTotals() {
             const host = this.$('playerTotals');
             if (!host) return;
@@ -235,13 +355,21 @@
             this.attachPlayerClicks(host);
         }
 
+        /**
+         * Wire player chips to the detail modal.
+         * @param {HTMLElement} host Container element.
+         * @returns {void}
+         */
         attachPlayerClicks(host) {
             host.querySelectorAll('[data-player]').forEach(el => {
                 el.addEventListener('click', () => this.app.openPlayerModal(el.dataset.player));
             });
         }
 
-        // ================= game history =================
+        /**
+         * Render the History tab list.
+         * @returns {void}
+         */
         renderGameHistory() {
             const host = this.$('gameHistory');
             if (!host) return;
@@ -252,13 +380,18 @@
             host.innerHTML = [...this.state.gameHistory].reverse().map(g => this.renderGameCard(g)).join('');
         }
 
+        /**
+         * Build one game-history card.
+         * @param {Object} game History record.
+         * @returns {string} HTML.
+         */
         renderGameCard(game) {
             const start = new Date(game.startTime);
             const end = new Date(game.endTime);
             const duration = isFinite(end) ? Math.round((end - start) / 60000) : 0;
             const editing = String(this.state.editingGameId) === String(game.id);
             const teams = Object.entries(game.scores)
-                .filter(([t]) => t !== 'UNKNOWN') // holding bucket, not a competitor
+                .filter(([t]) => t !== 'UNKNOWN')
                 .sort((a, b) => b[1].score - a[1].score);
             // Standard competition ranking: equal scores share a rank (1, 2, 2, 4).
             const ranks = [];

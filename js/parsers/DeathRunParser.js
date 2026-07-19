@@ -1,13 +1,5 @@
 /**
- * DeathRunParser - team mode scored by individual finish placement, plus a
- * "First full team finish" bonus.
- *   "» You finished in 1st place! [01:21.801]"
- *   "» SamsungWaffle has finished in 2nd place! ..."
- *   "» 1st Place: Qv19v [01:21.801]"  (final leaderboard)
- *
- * Both the per-player "finished in" lines and the final "Nth Place:" leaderboard
- * appear; recording is idempotent (placement awarded once per player) so seeing
- * both does not double-count.
+ * DeathRunParser - scored by individual finish placement plus team-finish bonuses.
  */
 (function (global) {
     'use strict';
@@ -16,6 +8,11 @@
     class DeathRunParser extends Base {
         get name() { return 'DeathRun'; }
 
+        /**
+         * DeathRun line detection.
+         * @param {string} clean Stripped chat line.
+         * @returns {boolean} True when the line scored.
+         */
         detect(clean) {
             return this.detectIndividualPlacement(clean);
         }

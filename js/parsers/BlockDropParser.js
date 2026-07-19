@@ -1,8 +1,5 @@
 /**
  * BlockDropParser - individual last-player-standing.
- *   "» humblespace5534 fell off the map! [5 XP]"
- *   "» Juliy4x forgot their parachute!"  /  "» Qv19v got ratio'd!"
- *   "» You died!"  /  "» Game OVER!"
  */
 (function (global) {
     'use strict';

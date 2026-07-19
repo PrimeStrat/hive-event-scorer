@@ -1,50 +1,43 @@
 /**
- * ScoringEngine - shared scoring logic that sits between GameState and the
- * per-gamemode parsers. It owns:
- *  - awarding points to teams (single place that mutates score totals + events)
- *  - team / player placement recording and finalisation
- *  - player point-contribution math (used by stats renderers)
- *  - routing a chat line to the active gamemode parser
- *
- * Parsers call back into the engine for award/placement so the rules live in one
- * place; the engine never reaches into the DOM.
+ * ScoringEngine - shared scoring logic between GameState and the parsers:
+ * point awards, placements, finalisation, and contribution math.
  */
 (function (global) {
     'use strict';
 
-    const PLACEMENT_KEYS = {
-        1: '1st place',
-        2: '2nd place',
-        3: '3rd place',
-        4: '4th place',
-        5: '5th place',
-        6: '6th place',
-        7: '7th place',
-        8: '8th place',
-        9: '9th place',
-        10: '10th place',
-        11: '11th place',
-        12: '12th place',
-        13: '13th place',
-        14: '14th place',
-        15: '15th place'
-    };
-    // Catch-all bucket for unrostered players (e.g. the host who is only there to
-    // capture the log). It never earns points and its players are excluded from every
-    // placement / point calculation until they are reassigned to a real team.
+    const MAX_PLACEMENTS = 50;
+    const PLACEMENT_KEYS = {};
+    for (let i = 1; i <= MAX_PLACEMENTS; i++) {
+        PLACEMENT_KEYS[i] = global.Hive.ChatUtils.ordinal(i) + ' place';
+    }
     const UNKNOWN_TEAM = 'UNKNOWN';
 
     class ScoringEngine {
+        /**
+         * @param {GameState} state Shared game state.
+         * @param {PointSystem} pointSystem Point tables and toggles.
+         */
         constructor(state, pointSystem) {
             this.state = state;
             this.points = pointSystem;
-            this.parsers = {}; // gamemode -> parser instance
+            this.parsers = {};
         }
 
+        /**
+         * Register a parser instance for a gamemode.
+         * @param {string} gamemode Gamemode name.
+         * @param {GamemodeParser} parser Parser instance.
+         * @returns {void}
+         */
         registerParser(gamemode, parser) {
             this.parsers[gamemode] = parser;
         }
 
+        /**
+         * Parser for a gamemode, tolerant of spacing/case differences.
+         * @param {string} gamemode Gamemode name.
+         * @returns {GamemodeParser|null} Parser or null.
+         */
         parserFor(gamemode) {
             if (this.parsers[gamemode]) return this.parsers[gamemode];
             const norm = String(gamemode || '').replace(/\s+/g, '').toLowerCase();
@@ -54,23 +47,41 @@
             return null;
         }
 
+        /**
+         * Point-table key for a finishing position.
+         * @param {number} position 1-based position.
+         * @returns {string|null} Key like "3rd place" or null.
+         */
         placementKey(position) {
             return PLACEMENT_KEYS[position] || null;
         }
 
-        /** True for a team that should accrue points (i.e. any real team, not UNKNOWN). */
+        /**
+         * True for a team that should accrue points (any real team, not UNKNOWN).
+         * @param {string} teamName Team name.
+         * @returns {boolean} Whether the team scores.
+         */
         isScorableTeam(teamName) {
             return !!teamName && teamName !== UNKNOWN_TEAM;
         }
 
-        /** True for a player currently on a real (scorable) team. */
+        /**
+         * True for a player currently on a scorable team.
+         * @param {string} playerName Player name.
+         * @returns {boolean} Whether the player scores.
+         */
         isScorablePlayer(playerName) {
             return this.isScorableTeam(this.state.findPlayerTeam(playerName));
         }
 
-        /** Award points for an event type to a team, recording it in the events log. */
+        /**
+         * Award points for an event type to a team and record the event.
+         * @param {string} teamName Team name.
+         * @param {string} eventType Point-table key.
+         * @returns {number} Points awarded.
+         */
         awardPoints(teamName, eventType) {
-            if (!this.isScorableTeam(teamName)) return 0; // UNKNOWN team never scores
+            if (!this.isScorableTeam(teamName)) return 0;
             const table = this.points.forGamemode(this.state.gamemode);
             if (!table) return 0;
             const pts = table[eventType];
@@ -82,16 +93,30 @@
             return pts;
         }
 
+        /**
+         * True when a team already has an event of the given type.
+         * @param {string} teamName Team name.
+         * @param {string} placementKey Event type.
+         * @returns {boolean} Whether the event exists.
+         */
         hasPlacement(teamName, placementKey) {
             const s = this.state.scores[teamName];
             return !!(s && s.events.some(e => e.type === placementKey));
         }
 
+        /**
+         * Teams not yet eliminated.
+         * @returns {string[]} Team names.
+         */
         getActiveTeams() {
             return Object.keys(this.state.teams).filter(t => !this.state.eliminationOrder.includes(t));
         }
 
-        /** Number of players on a team that are still alive (not eliminated). */
+        /**
+         * Number of players on a team still alive.
+         * @param {string} teamName Team name.
+         * @returns {number} Alive count.
+         */
         aliveCount(teamName) {
             const team = this.state.teams[teamName];
             if (!team || !team.players) return 0;
@@ -101,7 +126,11 @@
             }).length;
         }
 
-        /** True when every player on a team has been eliminated (team is knocked out). */
+        /**
+         * True when every player on a team is eliminated.
+         * @param {string} teamName Team name.
+         * @returns {boolean} Whether the team is knocked out.
+         */
         isTeamFullyEliminated(teamName) {
             const team = this.state.teams[teamName];
             if (!team || !team.players || team.players.length === 0) return false;
@@ -111,7 +140,12 @@
             });
         }
 
-        // ---- team placements ---------------------------------------------
+        /**
+         * Record a team's placement and stamp its players.
+         * @param {string} teamName Team name.
+         * @param {number} position 1-based position.
+         * @returns {void}
+         */
         recordTeamPlacement(teamName, position) {
             const key = this.placementKey(position);
             if (key && !this.hasPlacement(teamName, key)) {
@@ -127,36 +161,44 @@
             }
         }
 
-        /** Record placement for a team being eliminated, derived from elimination order. */
+        /**
+         * Record placement for a team just eliminated, from elimination order.
+         * @param {string} teamName Team name.
+         * @returns {void}
+         */
         recordTeamEliminationPlacement(teamName) {
             const totalTeams = Object.keys(this.state.teams).length;
             const position = totalTeams - this.state.eliminationOrder.indexOf(teamName);
             this.recordTeamPlacement(teamName, position);
         }
 
-        /** If only one team remains active, finalise the whole game with it as winner. */
+        /**
+         * Finalise the game when only one active team remains.
+         * @returns {void}
+         */
         tryFinalize() {
             const active = this.getActiveTeams();
             if (active.length === 1) this.finalizeGamePlacements(active[0]);
         }
 
         /**
-         * Finalise a team-elimination game purely from survival state - the team(s)
-         * with players still alive win, NOT the team with the most points. Used on
-         * "Game OVER" to close out any teams that weren't explicitly eliminated.
-         * No-op once every team is already placed.
+         * Close out a team-elimination game from survival state on Game OVER.
+         * @returns {void}
          */
         finalizeFromSurvival() {
             const active = this.getActiveTeams();
-            if (active.length === 0) return;          // already fully placed
+            if (active.length === 0) return;
             if (active.length === 1) { this.finalizeGamePlacements(active[0]); return; }
-            // More than one team still "active" means some knock-outs weren't detected.
-            // Survival decides it: the team with the most players still alive wins.
             const winner = active.slice().sort((a, b) =>
                 this.aliveCount(b) - this.aliveCount(a) || a.localeCompare(b))[0];
             this.finalizeGamePlacements(winner);
         }
 
+        /**
+         * Assign final team placements around a winner.
+         * @param {string} winnerTeam Winning team name.
+         * @returns {void}
+         */
         finalizeGamePlacements(winnerTeam) {
             const totalTeams = Object.keys(this.state.teams).length;
             if (winnerTeam && !this.hasPlacement(winnerTeam, '1st place')) {
@@ -173,7 +215,13 @@
             this.state.currentGameCompleted = true;
         }
 
-        // ---- player placements (individual-survival modes) ---------------
+        /**
+         * Record an individual player's placement and award its points once.
+         * @param {string} teamName Player's team.
+         * @param {string} playerName Player name.
+         * @param {number} position 1-based position.
+         * @returns {void}
+         */
         recordPlayerPlacement(teamName, playerName, position) {
             const ps = this.state.getOrCreatePlayerStats(playerName, teamName);
             ps.placement = global.Hive.ChatUtils.ordinal(position);
@@ -188,146 +236,83 @@
         }
 
         /**
-         * Assign placements to every player from elimination order: first eliminated
-         * gets last place; survivors fill the top slots. Used by all individual-survival
-         * modes. UNKNOWN players (e.g. the logging host) are excluded entirely, so they
-         * neither score nor occupy a placement slot that would shift real players down.
+         * Rank every player from elimination order (survivors on top) and award
+         * last-standing team bonuses; 2nd/3rd tiers need the extended toggle.
+         * Block Party ties among survivors follow blockPartyTieMode.
+         * @returns {void}
          */
         finalizePlayerPlacements() {
-            const players = this.state.allPlayerNames().filter(n => this.isScorablePlayer(n));
+            const players = [...new Set(this.state.allPlayerNames().map(n => this.state.resolveCanonicalPlayer(n)))]
+                .filter(n => this.isScorablePlayer(n));
             const totalPlayers = players.length;
             if (totalPlayers === 0) return;
 
             const assigned = new Set();
             const finalPositions = [];
-
-            const order = this.state.playerEliminationOrder
-                .filter(n => this.isScorablePlayer(n));
-
-            const survivors = players
-                .filter(n => !order.includes(n))
-                .sort((a, b) => a.localeCompare(b));
-
-            const isBlockPartyTie =
-                this.state.gamemode === 'Block Party' &&
-                survivors.length > 1;
-
+            const order = this.state.playerEliminationOrder.filter(n => this.isScorablePlayer(n));
+            const survivors = players.filter(n => !order.includes(n)).sort((a, b) => a.localeCompare(b));
+            const isBlockPartyTie = this.state.gamemode === 'Block Party' && survivors.length > 1;
             const tieMode = this.points.blockPartyTieMode || 'shared-first';
 
-            // Record eliminated players.
             for (let i = 0; i < order.length; i++) {
                 const name = order[i];
                 const team = this.state.findPlayerTeam(name);
-
-                let pos;
-
-                if (isBlockPartyTie && tieMode === 'shared-first') {
-                    // Example with 3 tied survivors:
-                    // last eliminated = 2nd, then 3rd, then 4th...
-                    pos = order.length - i + 1;
-                } else {
-                    // Normal placement logic.
-                    // Also used for shared-placement ties.
-                    pos = totalPlayers - i;
-                }
-
+                // shared-first ties occupy 1st, pushing eliminated players down one slot.
+                const pos = (isBlockPartyTie && tieMode === 'shared-first')
+                    ? order.length - i + 1
+                    : totalPlayers - i;
                 this.recordPlayerPlacement(team, name, pos);
-
-                finalPositions.push({
-                    player: name,
-                    team,
-                    position: pos
-                });
-
+                finalPositions.push({ team, position: pos });
                 assigned.add(name);
             }
 
-            // Record surviving players.
             if (isBlockPartyTie) {
-                const tiedPosition =
-                    tieMode === 'shared-placement'
-                        ? survivors.length
-                        : 1;
-
+                const tiedPosition = tieMode === 'shared-placement' ? survivors.length : 1;
                 for (const name of survivors) {
                     const team = this.state.findPlayerTeam(name);
-
                     this.recordPlayerPlacement(team, name, tiedPosition);
-
-                    finalPositions.push({
-                        player: name,
-                        team,
-                        position: tiedPosition
-                    });
+                    finalPositions.push({ team, position: tiedPosition });
                 }
             } else {
                 for (let i = 0; i < survivors.length; i++) {
-                    const name = survivors[i];
-                    const team = this.state.findPlayerTeam(name);
+                    const team = this.state.findPlayerTeam(survivors[i]);
                     const pos = survivors.length - i;
-
-                    this.recordPlayerPlacement(team, name, pos);
-
-                    finalPositions.push({
-                        player: name,
-                        team,
-                        position: pos
-                    });
+                    this.recordPlayerPlacement(team, survivors[i], pos);
+                    finalPositions.push({ team, position: pos });
                 }
             }
 
-            // Rank teams by their best-finishing player.
-            const bestPlacementByTeam = {};
-
-            for (const result of finalPositions) {
-                if (!this.isScorableTeam(result.team)) continue;
-
-                if (
-                    bestPlacementByTeam[result.team] === undefined ||
-                    result.position < bestPlacementByTeam[result.team]
-                ) {
-                    bestPlacementByTeam[result.team] = result.position;
+            const bestByTeam = {};
+            for (const r of finalPositions) {
+                if (!this.isScorableTeam(r.team)) continue;
+                if (bestByTeam[r.team] === undefined || r.position < bestByTeam[r.team]) {
+                    bestByTeam[r.team] = r.position;
                 }
             }
-
-            const teamSurvivalRanking = Object.entries(bestPlacementByTeam)
-                .sort((a, b) => a[1] - b[1])
-                .map(([teamName]) => teamName);
-
-            const teamBonusEvents = [
-                'Last team standing',
-                'Second last team standing',
-                'Third last team standing'
-            ];
-
-            for (let i = 0; i < Math.min(3, teamSurvivalRanking.length); i++) {
-                const teamName = teamSurvivalRanking[i];
-                const eventType = teamBonusEvents[i];
-
-                if (!this.hasPlacement(teamName, eventType)) {
-                    this.awardPoints(teamName, eventType);
+            const ranking = Object.entries(bestByTeam).sort((a, b) => a[1] - b[1]).map(([t]) => t);
+            const bonusEvents = ['Last team standing', 'Second last team standing', 'Third last team standing'];
+            const tiers = this.points.enableExtendedTeamBonuses ? 3 : 1;
+            for (let i = 0; i < Math.min(tiers, ranking.length); i++) {
+                if (!this.hasPlacement(ranking[i], bonusEvents[i])) {
+                    this.awardPoints(ranking[i], bonusEvents[i]);
                 }
             }
-
             this.state.currentGameCompleted = true;
         }
 
         /**
-         * Rebuild the current game's team scores from the per-player event records after a
-         * roster change, so points follow players to their new team. Player-tagged data
-         * (kills, bed breaks, elimination / finish order) is the source of truth; UNKNOWN
-         * players are excluded from all scoring. Safe to call any time there are scores.
+         * Rebuild the current game's team scores from player-tagged records after
+         * a roster change, so points follow players to their new team.
+         * @returns {void}
          */
         recomputeScores() {
             const features = this.points.featuresFor(this.state.gamemode) || {};
-            // Snapshot player-tagged records from the existing (possibly stale) scores.
             const kills = [], beds = [], finishPlacements = [];
             for (const s of Object.values(this.state.scores)) {
                 if (Array.isArray(s.kills)) kills.push(...s.kills);
                 if (Array.isArray(s.bedBreaks)) beds.push(...s.bedBreaks);
                 if (Array.isArray(s.placements)) finishPlacements.push(...s.placements);
             }
-            // Reset and re-create a bucket for every current team.
             this.state.scores = {};
             for (const t of Object.keys(this.state.teams)) this.state.ensureScore(t);
 
@@ -344,9 +329,6 @@
                 this.awardPoints(t, 'Bed Break');
             }
 
-            // Placements: survival modes re-rank from the player-keyed elimination order
-            // (so a player leaving/joining UNKNOWN shifts the ranking); finish modes keep
-            // each player's absolute position from the log.
             if (features.individualSurvival) {
                 this.finalizePlayerPlacements();
             } else if (features.individualFinish) {
@@ -357,63 +339,42 @@
                     const key = this.placementKey(Number(p.position));
                     if (key) this.awardPoints(t, key);
                 }
-                if (features.teamFinish) this._recomputeTeamFinishes(finishPlacements);
+                if (features.teamFinish) this.recomputeTeamFinishes(finishPlacements);
             }
         }
 
         /**
-         * Re-derive the "First full team finish" bonus from finish positions: among teams
-         * whose every current member finished, the one whose last member finished earliest
-         * (smallest worst position) gets the single +1.
+         * Re-derive team-finish bonuses from finish positions; 2nd/3rd tiers need
+         * the extended toggle.
+         * @param {Array<{player: string, position: number}>} finishPlacements Player finish records.
+         * @returns {void}
          */
-        _recomputeTeamFinishes(finishPlacements) {
+        recomputeTeamFinishes(finishPlacements) {
             const posOf = {};
-
-            for (const p of finishPlacements) {
-                posOf[p.player] = Number(p.position);
-            }
-
-            const completedTeams = [];
-
+            for (const p of finishPlacements) posOf[p.player] = Number(p.position);
+            const completed = [];
             for (const [teamName, team] of Object.entries(this.state.teams)) {
                 if (!this.isScorableTeam(teamName)) continue;
-
                 const members = team.players || [];
-
-                if (
-                    members.length === 0 ||
-                    members.some(member => posOf[member] === undefined)
-                ) {
-                    continue;
-                }
-
-                const completionPosition = Math.max(
-                    ...members.map(member => posOf[member])
-                );
-
-                completedTeams.push({
-                    teamName,
-                    completionPosition
-                });
+                if (members.length === 0 || members.some(m => posOf[m] === undefined)) continue;
+                completed.push({ teamName, rank: Math.max(...members.map(m => posOf[m])) });
             }
-
-            completedTeams.sort((a, b) =>
-                a.completionPosition - b.completionPosition ||
-                a.teamName.localeCompare(b.teamName)
-            );
-
-            const bonusEvents = [
-                'First full team finish',
-                'Second full team finish',
-                'Third full team finish'
-            ];
-
-            for (let i = 0; i < Math.min(3, completedTeams.length); i++) {
-                this.awardPoints(completedTeams[i].teamName, bonusEvents[i]);
+            completed.sort((a, b) => a.rank - b.rank || a.teamName.localeCompare(b.teamName));
+            const bonusEvents = ['First full team finish', 'Second full team finish', 'Third full team finish'];
+            const tiers = this.points.enableExtendedTeamBonuses ? 3 : 1;
+            for (let i = 0; i < Math.min(tiers, completed.length); i++) {
+                this.awardPoints(completed[i].teamName, bonusEvents[i]);
             }
         }
 
-        // ---- contribution math (for stats display) -----------------------
+        /**
+         * A player's point contribution within a team score record.
+         * @param {Object} teamScore Team score bucket.
+         * @param {string} playerName Player name.
+         * @param {Object} playerData Player stats record.
+         * @param {Object} pointSystemTable Point table for the gamemode.
+         * @returns {number} Contributed points.
+         */
         playerContribution(teamScore, playerName, playerData, pointSystemTable, features) {
             if (!teamScore) return 0;
             const table = pointSystemTable || {};
@@ -427,23 +388,12 @@
             if (Array.isArray(teamScore.bedBreaks)) {
                 total += teamScore.bedBreaks.filter(e => e.player === playerName).length * bedPts;
             }
-
-            const killLeaderPts = Number(table['Kill Leader'] || 0);
-
             if (Array.isArray(teamScore.events)) {
-                total += teamScore.events.filter(event =>
-                    event.type === 'Kill Leader' &&
-                    event.player === playerName
-                ).length * killLeaderPts;
-            }
-
-            const firstBloodPts = Number(table['First Blood'] || 0);
-
-            if (Array.isArray(teamScore.events)) {
-                total += teamScore.events.filter(event =>
-                    event.type === 'First Blood' &&
-                    event.player === playerName
-                ).length * firstBloodPts;
+                for (const eventType of ['Kill Leader', 'First Blood', 'Mystery Chest']) {
+                    const pts = Number(table[eventType] || 0);
+                    if (!pts) continue;
+                    total += teamScore.events.filter(e => e.type === eventType && e.player === playerName).length * pts;
+                }
             }
 
             if (features && (features.individualFinish || features.individualSurvival)) {
@@ -478,6 +428,12 @@
             return total;
         }
 
+        /**
+         * A player's contribution in the current game.
+         * @param {string} playerName Player name.
+         * @param {Object} playerData Player stats record.
+         * @returns {number} Contributed points.
+         */
         currentPlayerContribution(playerName, playerData) {
             if (!playerData || !playerData.team) return 0;
 
@@ -494,6 +450,13 @@
             );
         }
 
+        /**
+         * A player's contribution in a completed history game.
+         * @param {Object} game History record.
+         * @param {string} playerName Player name.
+         * @param {Object} playerData Player stats record from the game.
+         * @returns {number} Contributed points.
+         */
         gamePlayerContribution(game, playerName, playerData) {
             if (!game || !playerData || !playerData.team || !game.scores) return 0;
 

@@ -1,10 +1,6 @@
 /**
- * GameState - single source of truth for all mutable scoring data:
- * teams (manual rosters), current-game scores, per-player stats, completed game
- * history, elimination ordering, undo/redo stacks, and the activity log.
- *
- * Also owns persistence: localStorage autosave + JSON import/export. Data shapes
- * match the previous monolith so JSON/localStorage saved by older versions still load.
+ * GameState - single source of truth for all mutable scoring data and its
+ * localStorage/JSON persistence.
  */
 (function (global) {
     'use strict';
@@ -22,7 +18,6 @@
         'GREEN': { color: '#00AA00', colorCode: '2' },
         'DARK GRAY': { color: '#555555', colorCode: '8' },
         'CYAN': { color: '#00AAAA', colorCode: '3' },
-        // Catch-all bucket for players found in logs who weren't assigned to a team.
         'UNKNOWN': { color: '#9CA3AF', colorCode: '7' }
     };
 
@@ -34,10 +29,10 @@
 
             this.gamemode = '';
             this.currentGame = null;
-            this.scores = {};        // teamName -> { score, placements[], kills[], bedBreaks[], events[] }
-            this.teams = {};         // teamName -> { color, colorCode, players[] }
+            this.scores = {};
+            this.teams = {};
             this.substitutions = {};
-            this.playerStats = {};   // playerName -> { team, kills, deaths, finalKills, bedBreaks, eliminated, placement }
+            this.playerStats = {};
             this.activityLog = [];
             this.eliminationOrder = [];
             this.playerEliminationOrder = [];
@@ -46,14 +41,20 @@
             this.gameHistory = [];
             this.currentGameCompleted = false;
             this.editingGameId = null;
+            this.skyWarsKillLeader = null;
 
             this.undoStack = [];
             this.redoStack = [];
 
-            this.onLog = null; // optional callback(entry) for live UI updates
+            this.onLog = null;
         }
 
-        // ---- activity log -------------------------------------------------
+        /**
+         * Append an activity-log entry and notify the live listener.
+         * @param {string} message Entry text.
+         * @param {string} type 'info' | 'success' | 'warning'.
+         * @returns {{message: string, type: string, time: string}} The entry.
+         */
         addLog(message, type = 'info') {
             const entry = { message, type, time: new Date().toISOString() };
             this.activityLog.push(entry);
@@ -61,42 +62,45 @@
             return entry;
         }
 
-        // ---- team helpers -------------------------------------------------
-        findPlayerTeam(playerName) {
-            const canonicalPlayer = this.resolveCanonicalPlayer(playerName);
-
-            for (const [teamName, data] of Object.entries(this.teams)) {
-                if (
-                    data.players &&
-                    data.players.includes(canonicalPlayer)
-                ) {
-                    return teamName;
-                }
-            }
-
-            return null;
-        }
-
-        allPlayerNames() {
-            const names = [];
-
-            for (const data of Object.values(this.teams)) {
-                if (data.players) names.push(...data.players);
-            }
-
-            // Subs must also be detectable in chat logs.
-            names.push(...Object.keys(this.substitutions || {}));
-
-            return [...new Set(names)];
-        }
-
+        /**
+         * Map a substitute's name to the rostered player they play for.
+         * @param {string} playerName Logged player name.
+         * @returns {string} Canonical roster name.
+         */
         resolveCanonicalPlayer(playerName) {
             return this.substitutions[playerName] || playerName;
         }
 
         /**
-         * Add a player discovered in the logs but not assigned to any team to the
-         * catch-all "UNKNOWN" team, creating that team if needed. Returns the team name.
+         * Team a player is rostered on; substitutes resolve to their original.
+         * @param {string} playerName Player name.
+         * @returns {string|null} Team name or null.
+         */
+        findPlayerTeam(playerName) {
+            const canonical = this.resolveCanonicalPlayer(playerName);
+            for (const [teamName, data] of Object.entries(this.teams)) {
+                if (data.players && data.players.includes(canonical)) return teamName;
+            }
+            return null;
+        }
+
+        /**
+         * Every rostered player name plus substitute aliases (chat-detectable).
+         * @returns {string[]} Player names.
+         */
+        allPlayerNames() {
+            const names = [];
+            for (const data of Object.values(this.teams)) {
+                if (data.players) names.push(...data.players);
+            }
+            names.push(...Object.keys(this.substitutions || {}));
+            return [...new Set(names)];
+        }
+
+        /**
+         * Add an unrostered player to the catch-all UNKNOWN team.
+         * @param {string} playerName Player name.
+         * @returns {string|null} The team name, or null for a blank name.
          */
         addUnknownPlayer(playerName) {
             if (!playerName) return null;
@@ -110,6 +114,11 @@
             return teamName;
         }
 
+        /**
+         * Return a team record, creating it from presets if missing.
+         * @param {string} teamName Team name.
+         * @returns {{color: string, colorCode: string, players: string[]}} The team.
+         */
         ensureTeam(teamName) {
             if (!this.teams[teamName]) {
                 const preset = this.predefinedTeams[teamName] || { color: '#FFFFFF', colorCode: 'f' };
@@ -118,26 +127,31 @@
             return this.teams[teamName];
         }
 
+        /**
+         * Return a player's stats record, creating it if missing. Substitute names
+         * resolve to the original player so their stats merge.
+         * @param {string} playerName Player name.
+         * @param {string} teamName Team to associate.
+         * @returns {Object} The stats record.
+         */
         getOrCreatePlayerStats(playerName, teamName) {
-            const canonicalPlayer = this.resolveCanonicalPlayer(playerName);
-
-            if (!this.playerStats[canonicalPlayer]) {
-                this.playerStats[canonicalPlayer] = {
-                    team: teamName,
-                    kills: 0,
-                    deaths: 0,
-                    finalKills: 0,
-                    bedBreaks: 0,
-                    eliminated: false,
-                    placement: null
+            const canonical = this.resolveCanonicalPlayer(playerName);
+            if (!this.playerStats[canonical]) {
+                this.playerStats[canonical] = {
+                    team: teamName, kills: 0, deaths: 0, finalKills: 0,
+                    bedBreaks: 0, eliminated: false, placement: null
                 };
             } else if (teamName) {
-                this.playerStats[canonicalPlayer].team = teamName;
+                this.playerStats[canonical].team = teamName;
             }
-
-            return this.playerStats[canonicalPlayer];
+            return this.playerStats[canonical];
         }
 
+        /**
+         * Return a team's score bucket, creating it if missing.
+         * @param {string} teamName Team name.
+         * @returns {Object} The score bucket.
+         */
         ensureScore(teamName) {
             if (!this.scores[teamName]) {
                 this.scores[teamName] = { score: 0, placements: [], kills: [], bedBreaks: [], events: [] };
@@ -145,7 +159,11 @@
             return this.scores[teamName];
         }
 
-        // ---- new game -----------------------------------------------------
+        /**
+         * Reset all per-game state and begin a new game.
+         * @param {string} gamemode Gamemode name.
+         * @returns {void}
+         */
         startNewGame(gamemode) {
             this.gamemode = gamemode;
             this.currentGame = {
@@ -161,15 +179,24 @@
             this.playersFinished = {};
             this.teamsFullyFinished = [];
             this.currentGameCompleted = false;
+            this.skyWarsKillLeader = null;
 
             Object.keys(this.teams).forEach(teamName => this.ensureScore(teamName));
         }
 
+        /**
+         * True when the current game has any score buckets.
+         * @returns {boolean} Whether scores exist.
+         */
         hasActiveScores() {
             return Object.keys(this.scores).length > 0;
         }
 
-        // ---- undo / redo --------------------------------------------------
+        /**
+         * Deep-copy the undoable state.
+         * @param {string} action Label for the snapshot.
+         * @returns {Object} Snapshot.
+         */
         captureSnapshot(action) {
             return {
                 action,
@@ -187,6 +214,11 @@
             };
         }
 
+        /**
+         * Restore a snapshot produced by captureSnapshot.
+         * @param {Object} s Snapshot.
+         * @returns {void}
+         */
         restoreSnapshot(s) {
             this.currentGame = clone(s.currentGame);
             this.gameHistory = clone(s.gameHistory);
@@ -201,11 +233,20 @@
             this.teamsFullyFinished = clone(s.teamsFullyFinished);
         }
 
+        /**
+         * Push an undo snapshot and clear the redo stack.
+         * @param {string} action Label for the snapshot.
+         * @returns {void}
+         */
         pushUndo(action) {
             this.undoStack.push(this.captureSnapshot(action));
             this.redoStack = [];
         }
 
+        /**
+         * Undo the latest snapshot.
+         * @returns {string|null} The undone action label, or null.
+         */
         undo() {
             if (this.undoStack.length === 0) return null;
             const state = this.undoStack.pop();
@@ -214,6 +255,10 @@
             return state.action;
         }
 
+        /**
+         * Redo the latest undone snapshot.
+         * @returns {string|null} The redone action label, or null.
+         */
         redo() {
             if (this.redoStack.length === 0) return null;
             const state = this.redoStack.pop();
@@ -222,7 +267,10 @@
             return state.action;
         }
 
-        // ---- game history -------------------------------------------------
+        /**
+         * Roll the current game into gameHistory (updates an existing record by id).
+         * @returns {boolean} False when there is nothing to save.
+         */
         saveGameToHistory() {
             if (!this.currentGame || !this.hasActiveScores()) return false;
             this.currentGame.endTime = new Date().toISOString();
@@ -243,7 +291,11 @@
             return true;
         }
 
-        // ---- persistence --------------------------------------------------
+        /**
+         * Build the full persistable data object.
+         * @param {Object} extra Extra fields to merge in.
+         * @returns {Object} Serialized data.
+         */
         serialize(extra = {}) {
             return Object.assign({
                 teams: this.teams,
@@ -262,9 +314,18 @@
             }, extra);
         }
 
+        /**
+         * Apply serialized data over the current state.
+         * @param {Object} data Serialized data.
+         * @param {{includeTeams: boolean}} opts Whether to overwrite teams.
+         * @returns {void}
+         */
         applyData(data, { includeTeams = true } = {}) {
             if (!data) return;
             if (includeTeams && data.teams) this.teams = data.teams;
+            if (data.substitutions && typeof data.substitutions === 'object' && !Array.isArray(data.substitutions)) {
+                this.substitutions = data.substitutions;
+            }
             if (data.currentGame) this.currentGame = data.currentGame;
             if (data.scores) this.scores = data.scores;
             if (data.playerStats) this.playerStats = data.playerStats;
@@ -273,99 +334,70 @@
             if (Array.isArray(data.gameHistory)) this.gameHistory = data.gameHistory;
             if (data.playersFinished) this.playersFinished = data.playersFinished;
             if (data.teamsFullyFinished) this.teamsFullyFinished = data.teamsFullyFinished;
-            if (
-                data.substitutions &&
-                typeof data.substitutions === 'object' &&
-                !Array.isArray(data.substitutions)
-            ) {
-                this.substitutions = data.substitutions;
-            }
             this.undoStack = Array.isArray(data.undoStack) ? data.undoStack : [];
             this.redoStack = Array.isArray(data.redoStack) ? data.redoStack : [];
             if (data.gamemode) this.gamemode = data.gamemode;
         }
 
+        /**
+         * Load persisted teams, event data and history from localStorage.
+         * @returns {void}
+         */
         loadFromStorage() {
-            if (typeof localStorage === 'undefined') return;
-
-            const savedSubs = localStorage.getItem('hive_substitutions');
-
+            const store = global.Hive.Storage;
+            if (!store) return;
+            const savedTeams = store.getItem('hive_teams');
+            if (savedTeams) {
+                try { this.teams = JSON.parse(savedTeams); } catch (e) { console.error('teams load', e); }
+            }
+            const savedSubs = store.getItem('hive_substitutions');
             if (savedSubs) {
                 try {
-                    this.substitutions = JSON.parse(savedSubs);
-                } catch (e) {
-                    console.error('substitutions load', e);
-                }
+                    const parsed = JSON.parse(savedSubs);
+                    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) this.substitutions = parsed;
+                } catch (e) { console.error('subs load', e); }
             }
-
-            const savedTeams = localStorage.getItem('hive_teams');
-
-            if (savedTeams) {
-                try {
-                    this.teams = JSON.parse(savedTeams);
-                } catch (e) {
-                    console.error('teams load', e);
-                }
-            }
-
             try {
-                const eventData = localStorage.getItem('hive_event_data');
-
-                if (eventData) {
-                    this.applyData(
-                        JSON.parse(eventData),
-                        { includeTeams: false }
-                    );
-                }
-
-                const history = localStorage.getItem('hive_game_history');
-
+                const eventData = store.getItem('hive_event_data');
+                if (eventData) this.applyData(JSON.parse(eventData), { includeTeams: false });
+                const history = store.getItem('hive_game_history');
                 if (history) {
                     const parsed = JSON.parse(history);
-
-                    if (Array.isArray(parsed)) {
-                        this.gameHistory = parsed;
-                    }
+                    if (Array.isArray(parsed)) this.gameHistory = parsed;
                 }
             } catch (e) {
                 console.error('Error loading persistent data:', e);
-                this.gameHistory = [];
-                this.undoStack = [];
-                this.redoStack = [];
-            }
-        }
-
-        syncToStorage() {
-            if (typeof localStorage === 'undefined') return;
-            localStorage.setItem(
-                'hive_substitutions',
-                JSON.stringify(this.substitutions)
-            );
-            localStorage.setItem('hive_teams', JSON.stringify(this.teams));
-            localStorage.setItem('hive_game_history', JSON.stringify(this.gameHistory));
-            localStorage.setItem('hive_event_data', JSON.stringify(this.serialize()));
-        }
-
-        saveTeams() {
-            if (typeof localStorage !== 'undefined') {
-                localStorage.setItem(
-                    'hive_teams',
-                    JSON.stringify(this.teams)
-                );
-
-                localStorage.setItem(
-                    'hive_substitutions',
-                    JSON.stringify(this.substitutions)
-                );
+                this.gameHistory = []; this.undoStack = []; this.redoStack = [];
             }
         }
 
         /**
-         * Wipe all scoring statistics — current game, scores, per-player stats,
-         * elimination/finish tracking, completed game history, and undo/redo — while
-         * KEEPING team rosters (teams are only cleared from the Teams tab). Also
-         * clears the persisted game/event localStorage keys so the wipe survives
-         * reload; the hive_teams key is left intact.
+         * Persist all state to the app data store.
+         * @returns {void}
+         */
+        syncToStorage() {
+            const store = global.Hive.Storage;
+            if (!store) return;
+            store.setItem('hive_teams', JSON.stringify(this.teams));
+            store.setItem('hive_substitutions', JSON.stringify(this.substitutions));
+            store.setItem('hive_game_history', JSON.stringify(this.gameHistory));
+            store.setItem('hive_event_data', JSON.stringify(this.serialize()));
+        }
+
+        /**
+         * Persist team rosters and substitutions only.
+         * @returns {void}
+         */
+        saveTeams() {
+            const store = global.Hive.Storage;
+            if (!store) return;
+            store.setItem('hive_teams', JSON.stringify(this.teams));
+            store.setItem('hive_substitutions', JSON.stringify(this.substitutions));
+        }
+
+        /**
+         * Wipe all scoring statistics and history while keeping team rosters.
+         * @returns {void}
          */
         wipeStatistics() {
             this.currentGame = null;
@@ -381,13 +413,18 @@
             this.undoStack = [];
             this.redoStack = [];
 
-            if (typeof localStorage !== 'undefined') {
-                localStorage.removeItem('hive_game_history');
-                localStorage.removeItem('hive_event_data');
-                localStorage.removeItem('hive_emergency_backup'); // legacy key cleanup
+            const store = global.Hive.Storage;
+            if (store) {
+                store.removeItem('hive_game_history');
+                store.removeItem('hive_event_data');
+                store.removeItem('hive_emergency_backup');
             }
         }
 
+        /**
+         * True when there is any data worth saving.
+         * @returns {boolean} Whether stats, scores or history exist.
+         */
         hasDataToSave() {
             return Object.keys(this.playerStats).length > 0 ||
                 Object.keys(this.scores).length > 0 ||

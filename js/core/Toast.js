@@ -1,10 +1,5 @@
 /**
- * Toast - tiny non-blocking notification in the top-right corner.
- *
- * Used instead of blocking confirm()/beforeunload prompts: e.g. when the host
- * starts a new game we gently remind them to save tournament progress. Toasts
- * auto-dismiss after a timeout and can be dismissed early by clicking; they never
- * stack up or block the page.
+ * Toast - non-blocking notification in the top-right corner.
  */
 (function (global) {
     'use strict';
@@ -12,7 +7,11 @@
     const Toast = {
         _stack: null,
 
-        _ensureStack() {
+        /**
+         * Return the toast container, creating it on first use.
+         * @returns {HTMLElement} The stack element.
+         */
+        ensureStack() {
             if (this._stack && document.body.contains(this._stack)) return this._stack;
             let el = document.querySelector('.toast-stack');
             if (!el) {
@@ -25,11 +24,13 @@
         },
 
         /**
-         * @param {string} message  body text
-         * @param {object} opts  { title, type: 'info'|'warning', duration (ms) }
+         * Show a toast that auto-dismisses and can be clicked away.
+         * @param {string} message Body text.
+         * @param {{title: string, type: string, duration: number}} opts Optional title, 'info'|'warning' type, and ms duration.
+         * @returns {void}
          */
         show(message, opts = {}) {
-            const stack = this._ensureStack();
+            const stack = this.ensureStack();
             const toast = document.createElement('div');
             toast.className = 'toast' + (opts.type ? ' ' + opts.type : '');
             toast.innerHTML = (opts.title ? `<strong>${opts.title}</strong>` : '') +
@@ -42,7 +43,6 @@
             toast.addEventListener('click', remove);
 
             stack.appendChild(toast);
-            // Force reflow so the transition runs.
             requestAnimationFrame(() => toast.classList.add('show'));
 
             const duration = opts.duration === undefined ? 5000 : opts.duration;

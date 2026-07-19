@@ -1,15 +1,6 @@
 /**
  * SurvivalLastStandingParser - shared base for individual last-player-standing
- * modes (Block Drop, Block Party). Players are eliminated one by one via flavour
- * phrases; final placement is derived from elimination order on "Game OVER".
- *
- * Detection is structural: a non-chat "»" line that names exactly one registered
- * player and is not a known noise line counts as that player's elimination. This
- * accepts ANY flavour verb without a whitelist.
- *
- * Block Party also emits "Yellow is the chosen color!" lines containing color
- * words - these name no registered player (color words aren't IGNs) so they are
- * naturally ignored, but we also guard against them explicitly.
+ * modes (Block Drop, Block Party).
  */
 (function (global) {
     'use strict';
@@ -17,12 +8,17 @@
     const ChatUtils = global.Hive.ChatUtils;
 
     class SurvivalLastStandingParser extends Base {
+        /**
+         * Any non-noise line naming exactly one registered player is that
+         * player's elimination.
+         * @param {string} clean Stripped chat line.
+         * @returns {boolean} True when the line scored.
+         */
         detect(clean) {
             if (this.isNoise(clean) || this.isLobbyLine(clean)) return false;
 
             const players = ChatUtils.findPlayersInText(clean, this.state.allPlayerNames());
 
-            // "You died!" -> local player elimination.
             if (players.length === 0 && /you died/i.test(clean)) {
                 const me = this.resolvePlayerName('You');
                 if (me) return this.recordDeath(me) !== false;
@@ -32,10 +28,14 @@
             if (players.length === 1) {
                 return this.recordDeath(players[0]) !== false;
             }
-            // Two-player lines aren't expected in these modes; ignore to stay safe.
             return false;
         }
 
+        /**
+         * True for mode-specific noise lines.
+         * @param {string} clean Stripped chat line.
+         * @returns {boolean} Whether the line is noise.
+         */
         isNoise(clean) {
             return /is the chosen color/i.test(clean) ||
                 /color bomb/i.test(clean) ||
@@ -45,9 +45,13 @@
                 /XP\s+for breaking/i.test(clean);
         }
 
+        /**
+         * Finalise placements from elimination order.
+         * @param {string} clean Stripped chat line.
+         * @returns {void}
+         */
         onGameOver(clean) {
             super.onGameOver(clean);
-            // Finalise placements from elimination order, then mark the game complete.
             this.engine.finalizePlayerPlacements();
             this.state.addLog(`${this.name} game over - placements finalised`, 'info');
         }

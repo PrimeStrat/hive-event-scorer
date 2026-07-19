@@ -1,7 +1,5 @@
 /**
- * Parser registry - maps a gamemode name to its parser class and builds parser
- * instances bound to the shared state/engine/points. Custom gamemodes (created in
- * Settings) fall back to the generic base parser.
+ * Parser registry - maps gamemode names to parser classes and builds instances.
  */
 (function (global) {
     'use strict';
@@ -17,15 +15,27 @@
         'Block Party': P['Block Party']
     };
 
+    /**
+     * Parser class for a gamemode; custom gamemodes get the base parser.
+     * @param {string} gamemode Gamemode name.
+     * @returns {Function} Parser class.
+     */
     function classFor(gamemode) {
         if (REGISTRY[gamemode]) return REGISTRY[gamemode];
         const norm = String(gamemode || '').replace(/\s+/g, '').toLowerCase();
         for (const [name, cls] of Object.entries(REGISTRY)) {
             if (name.replace(/\s+/g, '').toLowerCase() === norm) return cls;
         }
-        return P.GamemodeParser; // custom gamemodes use base behaviour
+        return P.GamemodeParser;
     }
 
+    /**
+     * Build and register a parser instance per gamemode.
+     * @param {GameState} state Shared game state.
+     * @param {ScoringEngine} engine Scoring engine.
+     * @param {PointSystem} points Point tables and toggles.
+     * @returns {Object} Gamemode name to parser instance.
+     */
     function buildAll(state, engine, points) {
         const built = {};
         for (const name of Object.keys(REGISTRY)) {

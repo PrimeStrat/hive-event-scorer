@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;700;800&display=swap"
         rel="stylesheet">
+    <link rel="icon" href="assets/icon-16.png">
     <link rel="stylesheet" href="css/global.css">
     <link rel="stylesheet" href="css/app.css">
 </head>
@@ -90,6 +91,23 @@
                         <button type="button" id="processBtn" class="btn btn-primary">Process Chat</button>
                         <button type="button" id="processSingleLine" class="btn btn-secondary">Process Last
                             Line</button>
+                        <button type="button" id="liveCaptureBtn" class="btn btn-secondary hidden">Live Capture:
+                            OFF</button>
+                    </div>
+                </div>
+
+                <!-- Manual events (bed breaks can't be attributed from the log) -->
+                <div id="manualEvents" class="section manual-events hidden">
+                    <div class="section-header">
+                        <h2>Manual Events</h2>
+                    </div>
+                    <p class="help-text">The chat log only shows bed breaks against your own bed, so record each bed
+                        break here as it happens.</p>
+                    <div class="manual-event-row">
+                        <select id="bedBreakPlayer" aria-label="Player who broke a bed">
+                            <option value="">-- Player --</option>
+                        </select>
+                        <button type="button" id="addBedBreak" class="btn btn-primary">Add Bed Break</button>
                     </div>
                 </div>
 
@@ -236,9 +254,43 @@
                 </div>
             </div>
         </div>
-
         <!-- Player detail modal -->
         <div id="playerModal" class="modal" aria-hidden="true">
+            <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="playerModalTitle">
+                <div class="modal-header">
+                    <h2 id="playerModalTitle">Player</h2>
+                    <button
+                        type="button"
+                        id="playerModalClose"
+                        class="modal-close"
+                        aria-label="Close dialog"
+                    >
+                        ×
+                    </button>
+                </div>
+
+                <div id="playerModalBody" class="modal-body"></div>
+            </div>
+        </div>
+
+        <!-- Team points detail modal -->
+        <div id="teamPointsModal" class="modal" aria-hidden="true">
+            <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="teamPointsModalTitle">
+                <div class="modal-header">
+                    <h2 id="teamPointsModalTitle">Team Points</h2>
+                    <button
+                        type="button"
+                        id="teamPointsModalClose"
+                        class="modal-close"
+                        aria-label="Close dialog"
+                    >
+                        ×
+                    </button>
+                </div>
+
+                <div id="teamPointsModalBody" class="modal-body"></div>
+            </div>
+        </div>
             <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="playerModalTitle">
                 <div class="modal-header">
                     <h2 id="playerModalTitle">Player</h2>
@@ -273,8 +325,8 @@
 
         <!-- Settings Tab -->
         <div id="settings" class="tab-content">
-            <div class="settings-container">
-                <div class="section">
+            <div class="settings-container settings-columns">
+                <div class="section settings-col-left">
                     <h2 class="section-title">Gamemode Settings</h2>
                     <p class="help-text">Configure point values and detection patterns for each gamemode.</p>
 
@@ -292,23 +344,6 @@
                         </div>
                     </div>
 
-                    <div class="pattern-group local-player-group">
-                        <label for="myIgn">My IGN (the log owner):</label>
-                        <input type="text" id="myIgn" class="pattern-input" placeholder="e.g. Qv19v">
-                        <span class="pattern-help">Used to attribute first-person events like "You killed ..."
-                            or "You finished in 1st place". Leave blank to skip "You" lines.</span>
-                    </div>
-
-                    <div class="pattern-group">
-                        <label class="checkbox-label" for="autoAddUnknownPlayers">
-                            <input type="checkbox" id="autoAddUnknownPlayers" checked>
-                            Auto-add unknown players to an "UNKNOWN" team
-                        </label>
-                        <span class="pattern-help">When a player appears in the logs but isn't assigned to any team,
-                            add them to a catch-all "UNKNOWN" team so their kills, placements and beds still count.
-                            Turn this off to ignore unrostered players entirely.</span>
-                    </div>
-
                     <div id="pointsSettings" class="points-settings">
                         <!-- Points settings will be dynamically populated -->
                     </div>
@@ -316,8 +351,7 @@
                     <div class="detection-patterns-section">
                         <h3>Detection Patterns</h3>
                         <p class="help-text">Configure what chat messages trigger scoring events. Use § for Minecraft
-                            color
-                            codes.</p>
+                            color codes.</p>
 
                         <div class="pattern-group">
                             <label>Team Elimination Pattern:</label>
@@ -351,6 +385,88 @@
                             <input type="text" id="patternIndividualFinish" class="pattern-input"
                                 placeholder="[PLAYER] finished in (\d+)(?:st|nd|rd|th) place">
                             <span class="pattern-help">Detects when a player finishes individually</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section settings-col-right">
+                    <h2 class="section-title">Optional Settings</h2>
+
+                    <div class="pattern-group local-player-group">
+                        <label for="myIgn">My IGN (the log owner):</label>
+                        <input type="text" id="myIgn" class="pattern-input" placeholder="e.g. PrimeStrat">
+                        <span class="pattern-help">Used to attribute first-person events like "You killed ..."
+                            or "You finished in 1st place". Leave blank to skip "You" lines.</span>
+                    </div>
+
+                    <div class="pattern-group">
+                        <label class="checkbox-label" for="autoAddUnknownPlayers">
+                            <input type="checkbox" id="autoAddUnknownPlayers" checked>
+                            Auto-add unknown players to an "UNKNOWN" team
+                        </label>
+                        <span class="pattern-help">When a player appears in the logs but isn't assigned to any team,
+                            add them to a catch-all "UNKNOWN" team so their kills, placements and beds still count.
+                            Turn this off to ignore unrostered players entirely.</span>
+                    </div>
+
+                    <div class="misc-toggles-section">
+                        <h3>Misc Toggles</h3>
+                        <p class="help-text">Optional scoring extras. Their point values appear in the point table
+                            while enabled.</p>
+
+                        <div class="pattern-group">
+                            <label class="checkbox-label" for="enableKillLeader">
+                                <input type="checkbox" id="enableKillLeader">
+                                Kill Leader bonus (SkyWars)
+                            </label>
+                            <span class="pattern-help">Awards the "Kill Leader" points once at game end to the team of
+                                the last announced kill leader.</span>
+                        </div>
+
+                        <div class="pattern-group">
+                            <label class="checkbox-label" for="enableExtendedTeamBonuses">
+                                <input type="checkbox" id="enableExtendedTeamBonuses">
+                                2nd/3rd place team bonuses
+                            </label>
+                            <span class="pattern-help">Adds "Second/Third full team finish" (DeathRun, Gravity) and
+                                "Second/Third last team standing" (Block Drop, Block Party) bonus tiers.</span>
+                        </div>
+
+                        <div class="pattern-group">
+                            <label class="checkbox-label" for="enableSoloPlacements">
+                                <input type="checkbox" id="enableSoloPlacements">
+                                Solo placements in PvP modes
+                            </label>
+                            <span class="pattern-help">SkyWars, Survival Games and BedWars award placement points per
+                                player by their own time alive instead of per team. A teammate dying does not improve
+                                your placement.</span>
+                        </div>
+
+                        <div class="pattern-group">
+                            <label class="checkbox-label" for="enableChestPoints">
+                                <input type="checkbox" id="enableChestPoints">
+                                Mystery Chest points (SkyWars)
+                            </label>
+                            <span class="pattern-help">Awards the "Mystery Chest" points to the team of the player who
+                                opens it.</span>
+                        </div>
+                    </div>
+
+                    <div id="presetsSection" class="presets-section hidden">
+                        <h3>Presets</h3>
+                        <p class="help-text">Load a bundled or saved settings preset, or save the current settings as
+                            a new preset.</p>
+                        <div class="preset-controls">
+                            <select id="presetSelect" aria-label="Settings preset">
+                                <option value="">-- Choose a preset --</option>
+                            </select>
+                            <div class="btn-group">
+                                <button type="button" id="loadPreset" class="btn btn-primary btn-small">Load</button>
+                                <button type="button" id="savePreset" class="btn btn-success btn-small">Save As</button>
+                                <button type="button" id="deletePreset" class="btn btn-danger btn-small">Delete</button>
+                                <button type="button" id="openPresetsFolder" class="btn btn-secondary btn-small">Open
+                                    Folder</button>
+                            </div>
                         </div>
                     </div>
 
@@ -391,6 +507,7 @@
 
     <!-- Core (load order matters: utilities -> state -> engine) -->
     <script src="js/core/ChatUtils.js"></script>
+    <script src="js/core/Storage.js"></script>
     <script src="js/core/Toast.js"></script>
     <script src="js/core/FileImport.js"></script>
     <script src="js/core/PosterExport.js"></script>

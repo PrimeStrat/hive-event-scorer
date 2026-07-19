@@ -1,16 +1,34 @@
 /**
- * SettingsRenderer - the Settings tab: per-gamemode point values, detection-pattern
- * hints (with visibility driven by gamemode features), and the "My IGN" field used
- * to attribute first-person ("You ...") events.
+ * SettingsRenderer - the Settings tab: per-gamemode point values (placements
+ * windowed to 12 with a show-all expander, up to 50), detection-pattern hints,
+ * the "My IGN" field, and the misc scoring toggles.
  */
 (function (global) {
     'use strict';
     const Base = global.Hive.renderers.Renderer;
 
+    const MAX_PLACEMENTS = 50;
+    const VISIBLE_PLACEMENTS = 12;
+    const PLACEMENT_RE = /^(\d+)(?:st|nd|rd|th) place$/;
+
     class SettingsRenderer extends Base {
         selectedGamemode() {
             const sel = this.$('settingsGamemode');
             return sel ? sel.value : '';
+        }
+
+        /**
+         * Non-placement keys hidden while their misc toggle is off.
+         * @param {string} action Point-table key.
+         * @returns {boolean} True when the key should be hidden.
+         */
+        isToggledOffKey(action) {
+            if (action === 'Kill Leader') return !this.points.enableKillLeader;
+            if (action === 'Mystery Chest') return !this.points.enableChestPoints;
+            if (/^(Second|Third) (full team finish|last team standing)$/.test(action)) {
+                return !this.points.enableExtendedTeamBonuses;
+            }
+            return false;
         }
 
         renderPoints() {
@@ -22,43 +40,55 @@
                 host.innerHTML = '<p class="empty-state">Invalid gamemode selected</p>';
                 return;
             }
-            host.innerHTML =
-                `<h3>Point Values for ${this.escapeHtml(mode)}</h3>` +
 
-                Object.entries(table).map(([action, value]) => `
-                    <div class="point-item">
-                        <label>${this.escapeHtml(action)}</label>
-                        <input
-                            type="number"
-                            data-action="${this.escapeHtml(action)}"
-                            value="${value}"
-                            min="0"
-                            max="100"
-                        >
-                    </div>
-                `).join('') +
+            const pointRow = (action, value, extraAttr) => `
+                <div class="point-item"${extraAttr || ''}>
+                    <label>${this.escapeHtml(action)}</label>
+                    <input type="number" data-action="${this.escapeHtml(action)}" value="${value}" min="0" max="1000">
+                </div>`;
 
-                (mode === 'Block Party' ? `
-                    <div class="point-item">
-                        <label>Block Party Tie Handling</label>
+            const otherRows = Object.entries(table)
+                .filter(([action]) => !PLACEMENT_RE.test(action) && !this.isToggledOffKey(action))
+                .map(([action, value]) => pointRow(action, value))
+                .join('');
 
-                        <select id="blockPartyTieMode">
-                            <option
-                                value="shared-first"
-                                ${this.points.blockPartyTieMode === 'shared-first' ? 'selected' : ''}
-                            >
-                                Multiple 1st Places
-                            </option>
+            const { ChatUtils } = global.Hive;
+            let placementRows = '';
+            let hiddenRows = '';
+            for (let i = 1; i <= MAX_PLACEMENTS; i++) {
+                const key = ChatUtils.ordinal(i) + ' place';
+                const row = pointRow(key, table[key] || 0, ' data-placement="1"');
+                if (i <= VISIBLE_PLACEMENTS) placementRows += row;
+                else hiddenRows += row;
+            }
 
-                            <option
-                                value="shared-placement"
-                                ${this.points.blockPartyTieMode === 'shared-placement' ? 'selected' : ''}
-                            >
-                                Shared Next Placement
-                            </option>
-                        </select>
-                    </div>
-                ` : '');
+            const tieModeRow = mode === 'Block Party' ? `
+                <div class="point-item">
+                    <label for="blockPartyTieMode">Tie Handling</label>
+                    <select id="blockPartyTieMode">
+                        <option value="shared-first" ${this.points.blockPartyTieMode === 'shared-first' ? 'selected' : ''}>Multiple 1st Places</option>
+                        <option value="shared-placement" ${this.points.blockPartyTieMode === 'shared-placement' ? 'selected' : ''}>Shared Next Placement</option>
+                    </select>
+                </div>` : '';
+
+            host.innerHTML = `<h3>Point Values for ${this.escapeHtml(mode)}</h3>` +
+                otherRows +
+                tieModeRow +
+                `<h4 class="placement-heading">Placement Points</h4>` +
+                placementRows +
+                `<div id="extraPlacements" class="extra-placements hidden">${hiddenRows}</div>` +
+                `<button type="button" id="togglePlacements" class="btn btn-secondary btn-small">` +
+                `Show all ${MAX_PLACEMENTS} placements</button>`;
+
+            const btn = this.$('togglePlacements');
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    const extra = this.$('extraPlacements');
+                    if (!extra) return;
+                    const nowHidden = extra.classList.toggle('hidden');
+                    btn.textContent = nowHidden ? `Show all ${MAX_PLACEMENTS} placements` : 'Show fewer placements';
+                });
+            }
         }
 
         renderPatterns() {
@@ -73,6 +103,14 @@
             if (ign) ign.value = this.points.myIgn || '';
             const autoAdd = this.$('autoAddUnknownPlayers');
             if (autoAdd) autoAdd.checked = this.points.autoAddUnknownPlayers !== false;
+            const killLeader = this.$('enableKillLeader');
+            if (killLeader) killLeader.checked = this.points.enableKillLeader === true;
+            const extBonuses = this.$('enableExtendedTeamBonuses');
+            if (extBonuses) extBonuses.checked = this.points.enableExtendedTeamBonuses === true;
+            const soloPlacements = this.$('enableSoloPlacements');
+            if (soloPlacements) soloPlacements.checked = this.points.enableSoloPlacements === true;
+            const chestPoints = this.$('enableChestPoints');
+            if (chestPoints) chestPoints.checked = this.points.enableChestPoints === true;
             this.updatePatternVisibility();
         }
 
@@ -85,12 +123,22 @@
             toggle('patternIndividualFinishGroup', features.individualFinish);
         }
 
-        /** Read point inputs + patterns + IGN from the DOM back into PointSystem. */
+        /** Read point inputs + patterns + IGN + misc toggles from the DOM back into PointSystem. */
         collectFromDom() {
             const mode = this.selectedGamemode();
-            if (this.points.pointSystems[mode]) {
+            const table = this.points.pointSystems[mode];
+            if (table) {
+                const defaults = global.Hive.PointSystem.defaultPointSystems()[mode] || {};
                 this.$('pointsSettings').querySelectorAll('input[type="number"]').forEach(input => {
-                    this.points.pointSystems[mode][input.dataset.action] = parseInt(input.value, 10) || 0;
+                    const action = input.dataset.action;
+                    const value = parseInt(input.value, 10) || 0;
+                    const isPlacement = PLACEMENT_RE.test(action);
+                    // Zero-valued non-default placements stay out of the table.
+                    if (isPlacement && value === 0 && defaults[action] === undefined) {
+                        delete table[action];
+                    } else {
+                        table[action] = value;
+                    }
                 });
             }
             const val = id => { const el = this.$(id); return el ? el.value : ''; };
@@ -105,12 +153,16 @@
             if (ign) this.points.myIgn = ign.value.trim();
             const autoAdd = this.$('autoAddUnknownPlayers');
             if (autoAdd) this.points.autoAddUnknownPlayers = autoAdd.checked;
-
-            const blockPartyTieMode = this.$('blockPartyTieMode');
-
-            if (blockPartyTieMode) {
-                this.points.blockPartyTieMode = blockPartyTieMode.value;
-            }
+            const killLeader = this.$('enableKillLeader');
+            if (killLeader) this.points.enableKillLeader = killLeader.checked;
+            const extBonuses = this.$('enableExtendedTeamBonuses');
+            if (extBonuses) this.points.enableExtendedTeamBonuses = extBonuses.checked;
+            const soloPlacements = this.$('enableSoloPlacements');
+            if (soloPlacements) this.points.enableSoloPlacements = soloPlacements.checked;
+            const chestPoints = this.$('enableChestPoints');
+            if (chestPoints) this.points.enableChestPoints = chestPoints.checked;
+            const tieMode = this.$('blockPartyTieMode');
+            if (tieMode) this.points.blockPartyTieMode = tieMode.value;
         }
 
         renderAll() {

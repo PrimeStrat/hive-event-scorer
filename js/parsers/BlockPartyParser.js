@@ -1,9 +1,5 @@
 /**
  * BlockPartyParser - individual last-player-standing.
- *   "» humblespace5534 made their last dance move [+2XP]"
- *   "» Juliy4x ain't stayin' alive"  /  "» Qv19v rock 'n' rolled into the void"
- *   "» Akumatizedd has two left feet"  /  "» NoahNacho27 fell off"
- * Ignores "Yellow is the chosen color!" style lines (no registered IGN present).
  */
 (function (global) {
     'use strict';
