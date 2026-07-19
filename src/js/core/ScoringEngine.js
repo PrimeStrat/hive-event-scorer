@@ -375,7 +375,7 @@
          * @param {Object} pointSystemTable Point table for the gamemode.
          * @returns {number} Contributed points.
          */
-        playerContribution(teamScore, playerName, playerData, pointSystemTable) {
+        playerContribution(teamScore, playerName, playerData, pointSystemTable, features) {
             if (!teamScore) return 0;
             const table = pointSystemTable || {};
             const killPts = Number(table['Kill'] || 0);
@@ -396,20 +396,33 @@
                 }
             }
 
-            let hasPlacementRecord = false;
-            if (Array.isArray(teamScore.placements)) {
-                for (const pl of teamScore.placements) {
-                    if (pl.player !== playerName) continue;
-                    hasPlacementRecord = true;
-                    const key = this.placementKey(Number(pl.position));
-                    if (key && table[key] !== undefined) total += Number(table[key]);
+            if (features && (features.individualFinish || features.individualSurvival)) {
+                let hasPlacementRecord = false;
+
+                if (Array.isArray(teamScore.placements)) {
+                    for (const pl of teamScore.placements) {
+                        if (pl.player !== playerName) continue;
+
+                        hasPlacementRecord = true;
+
+                        const key = this.placementKey(Number(pl.position));
+
+                        if (key && table[key] !== undefined) {
+                            total += Number(table[key]);
+                        }
+                    }
                 }
-            }
-            if (!hasPlacementRecord && playerData && playerData.placement) {
-                const m = String(playerData.placement).match(/\d+/);
-                if (m) {
-                    const key = this.placementKey(Number(m[0]));
-                    if (key && table[key] !== undefined) total += Number(table[key]);
+
+                if (!hasPlacementRecord && playerData && playerData.placement) {
+                    const m = String(playerData.placement).match(/\d+/);
+
+                    if (m) {
+                        const key = this.placementKey(Number(m[0]));
+
+                        if (key && table[key] !== undefined) {
+                            total += Number(table[key]);
+                        }
+                    }
                 }
             }
             return total;
@@ -423,9 +436,18 @@
          */
         currentPlayerContribution(playerName, playerData) {
             if (!playerData || !playerData.team) return 0;
+
             const teamScore = this.state.scores[playerData.team];
             const table = this.points.forGamemode(this.state.gamemode) || {};
-            return this.playerContribution(teamScore, playerName, playerData, table);
+            const features = this.points.featuresFor(this.state.gamemode) || {};
+
+            return this.playerContribution(
+                teamScore,
+                playerName,
+                playerData,
+                table,
+                features
+            );
         }
 
         /**
@@ -437,9 +459,18 @@
          */
         gamePlayerContribution(game, playerName, playerData) {
             if (!game || !playerData || !playerData.team || !game.scores) return 0;
+
             const teamScore = game.scores[playerData.team];
             const table = this.points.forGamemode(game.gamemode) || {};
-            return this.playerContribution(teamScore, playerName, playerData, table);
+            const features = this.points.featuresFor(game.gamemode) || {};
+
+            return this.playerContribution(
+                teamScore,
+                playerName,
+                playerData,
+                table,
+                features
+            );
         }
     }
 

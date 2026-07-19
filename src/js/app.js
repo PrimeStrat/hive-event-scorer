@@ -111,12 +111,21 @@
             this.on('wipeStats', 'click', () => this.wipeStatistics());
 
             this.on('playerModalClose', 'click', () => this.closeModal('playerModal'));
-            ['playerModal', 'exportModal'].forEach(id => {
+            this.on(
+                'teamPointsModalClose',
+                'click',
+                () => this.closeModal('teamPointsModal')
+            );
+            ['playerModal', 'teamPointsModal', 'exportModal'].forEach(id => {
                 const m = document.getElementById(id);
                 if (m) m.addEventListener('click', e => { if (e.target === m) this.closeModal(id); });
             });
             document.addEventListener('keydown', e => {
-                if (e.key === 'Escape') { this.closeModal('playerModal'); this.closeModal('exportModal'); }
+                if (e.key === 'Escape') {
+                    this.closeModal('playerModal');
+                    this.closeModal('teamPointsModal');
+                    this.closeModal('exportModal');
+                }
             });
 
             this.setupTeamManagement();
@@ -840,7 +849,11 @@
          */
         closeModal(id) {
             const m = document.getElementById(id);
-            if (m) m.classList.remove('open');
+
+            if (m) {
+                m.classList.remove('open');
+                m.setAttribute('aria-hidden', 'true');
+            }
         }
 
         /**

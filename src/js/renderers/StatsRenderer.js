@@ -31,47 +31,105 @@
          */
         aggregatePlayerScores() {
             const result = {};
+
             const add = (name, gamemode, pts) => {
-                if (!result[name]) result[name] = { totalPoints: 0, byGamemode: {} };
+                if (!result[name]) {
+                    result[name] = {
+                        totalPoints: 0,
+                        byGamemode: {}
+                    };
+                }
+
                 result[name].totalPoints += pts;
-                result[name].byGamemode[gamemode] = (result[name].byGamemode[gamemode] || 0) + pts;
+
+                result[name].byGamemode[gamemode] =
+                    (result[name].byGamemode[gamemode] || 0) + pts;
             };
 
             for (const game of this.state.gameHistory) {
-                const features = this.points.featuresFor(game.gamemode) || {};
-                const individual = !!(features.individualFinish || features.individualSurvival);
-
-                for (const [teamName, teamScore] of Object.entries(game.scores)) {
+                for (const [teamName] of Object.entries(game.scores || {})) {
                     if (teamName === 'UNKNOWN') continue;
+
                     const team = this.state.teams[teamName];
                     if (!team || !team.players) continue;
-                    const players = team.players.filter(p => game.playerStats[p]);
-                    if (players.length === 0) continue;
 
-                    const contrib = name => this.engine.gamePlayerContribution(game, name, game.playerStats[name]);
-                    const ranked = players.slice().sort((a, b) => contrib(b) - contrib(a));
+                    const players = team.players.filter(
+                        player => game.playerStats?.[player]
+                    );
 
-                    if (individual) {
-                        // Team-level bonuses are the leftover; credit them to the top earner.
-                        const sum = players.reduce((acc, n) => acc + contrib(n), 0);
-                        let leftover = teamScore.score - sum;
-                        for (const name of ranked) {
-                            let pts = contrib(name);
-                            if (leftover > 0) { pts += leftover; leftover = 0; }
-                            add(name, game.gamemode, pts);
-                        }
-                    } else {
-                        const base = Math.floor(teamScore.score / players.length);
-                        let remainder = teamScore.score - base * players.length;
-                        for (const name of ranked) {
-                            let pts = base;
-                            if (remainder > 0) { pts += 1; remainder--; }
-                            add(name, game.gamemode, pts);
-                        }
+                    for (const name of players) {
+                        const pts = this.engine.gamePlayerContribution(
+                            game,
+                            name,
+                            game.playerStats[name]
+                        );
+
+                        add(name, game.gamemode, pts);
                     }
                 }
             }
+
             return result;
+        }
+
+        teamPointBreakdown(teamName) {
+            const breakdown = [];
+            let total = 0;
+
+            for (const game of this.state.gameHistory) {
+                const teamScore = game.scores?.[teamName];
+                if (!teamScore) continue;
+
+                const features = this.points.featuresFor(game.gamemode) || {};
+
+                // Only these explicit event types are always team-level bonuses.
+                const teamBonusTypes = new Set([
+                    'First full team finish',
+                    'Second full team finish',
+                    'Third full team finish',
+
+                    'Last team standing',
+                    'Second last team standing',
+                    'Third last team standing'
+                ]);
+
+                for (const event of teamScore.events || []) {
+                    let isTeamEvent = teamBonusTypes.has(event.type);
+
+                    // Placement points are team points only in team-placement modes.
+                    const placementMatch = String(event.type || '').match(
+                        /^(\d+)(?:st|nd|rd|th) place$/i
+                    );
+
+                    if (
+                        placementMatch &&
+                        features.teamElimination &&
+                        !features.individualFinish &&
+                        !features.individualSurvival
+                    ) {
+                        isTeamEvent = true;
+                    }
+
+                    if (!isTeamEvent) continue;
+
+                    const points = Number(event.points || 0);
+
+                    if (points === 0) continue;
+
+                    breakdown.push({
+                        gamemode: game.gamemode,
+                        reason: event.type,
+                        points
+                    });
+
+                    total += points;
+                }
+            }
+
+            return {
+                total,
+                breakdown
+            };
         }
 
         /**
@@ -92,7 +150,26 @@
                 const players = roster
                     .map(name => ({ name, points: playerScores[name] ? playerScores[name].totalPoints : 0 }))
                     .sort((a, b) => b.points - a.points);
-                return { team: teamName, teamColor: this.teamColor(teamName), points, players };
+                const teamPointData = this.teamPointBreakdown(teamName);
+
+                const playerPoints = players.reduce(
+                    (sum, player) => sum + player.points,
+                    0
+                );
+
+                const teamPoints = Math.max(
+                    0,
+                    points - playerPoints
+                );
+
+                return {
+                    team: teamName,
+                    teamColor: this.teamColor(teamName),
+                    points,
+                    teamPoints,
+                    teamPointBreakdown: teamPointData.breakdown,
+                    players
+                };
             }).sort((a, b) => b.points - a.points);
         }
 
@@ -173,15 +250,88 @@
                         <span class="standings-team-total">${t.points} pts</span>
                     </div>
                     <div class="standings-players">
+                        ${t.teamPoints > 0 ? `
+                            <div
+                                class="standings-player standings-team-points"
+                                data-team-points="${this.escapeHtml(t.team)}"
+                                tabindex="0"
+                                role="button"
+                            >
+                                <span class="pname">Team Points</span>
+                                <span class="ppts">${t.teamPoints}</span>
+                            </div>
+                        ` : ''}
+
                         ${t.players.map(p => `
                             <div class="standings-player" data-player="${this.escapeHtml(p.name)}">
                                 <span class="pname">${this.escapeHtml(p.name)}</span>
                                 <span class="ppts">${p.points}</span>
-                            </div>`).join('')}
+                            </div>
+                        `).join('')}
+
                     </div>
                 </div>`).join('');
 
             this.attachPlayerClicks(host);
+            host.querySelectorAll('[data-team-points]').forEach(el => {
+                el.addEventListener('click', () => {
+                    const teamName = el.dataset.teamPoints;
+                    const team = standings.find(t => t.team === teamName);
+
+                    if (team) {
+                        this.openTeamPointsModal(team);
+                    }
+                });
+            });
+        }
+
+        openTeamPointsModal(team) {
+            if (!team) return;
+
+            const modal = document.getElementById('teamPointsModal');
+            const title = document.getElementById('teamPointsModalTitle');
+            const body = document.getElementById('teamPointsModalBody');
+
+            if (!modal || !title || !body) return;
+
+            title.textContent =
+                `${team.team} — Team Points (${team.teamPoints})`;
+
+            if (!team.teamPointBreakdown?.length) {
+                body.innerHTML =
+                    '<p class="empty-state">No team-point details available.</p>';
+
+                modal.classList.add('open');
+                return;
+            }
+
+            body.innerHTML = `
+                <div class="team-points-breakdown">
+                    ${team.teamPointBreakdown.map(item => `
+                        <div class="pd-game">
+                            <div class="pd-game-head">
+                                <span>
+                                    ${this.escapeHtml(item.gamemode)}
+                                </span>
+
+                                <span>
+                                    +${item.points} pts
+                                </span>
+                            </div>
+
+                            <div class="pd-game-stats">
+                                <span>
+                                    ${this.escapeHtml(item.reason)}
+                                </span>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+
+            modal.setAttribute('aria-hidden', 'false');
+            modal.classList.add('open');
+            return;
         }
 
         /**

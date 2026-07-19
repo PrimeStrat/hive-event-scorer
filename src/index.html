@@ -254,9 +254,43 @@
                 </div>
             </div>
         </div>
-
         <!-- Player detail modal -->
         <div id="playerModal" class="modal" aria-hidden="true">
+            <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="playerModalTitle">
+                <div class="modal-header">
+                    <h2 id="playerModalTitle">Player</h2>
+                    <button
+                        type="button"
+                        id="playerModalClose"
+                        class="modal-close"
+                        aria-label="Close dialog"
+                    >
+                        ×
+                    </button>
+                </div>
+
+                <div id="playerModalBody" class="modal-body"></div>
+            </div>
+        </div>
+
+        <!-- Team points detail modal -->
+        <div id="teamPointsModal" class="modal" aria-hidden="true">
+            <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="teamPointsModalTitle">
+                <div class="modal-header">
+                    <h2 id="teamPointsModalTitle">Team Points</h2>
+                    <button
+                        type="button"
+                        id="teamPointsModalClose"
+                        class="modal-close"
+                        aria-label="Close dialog"
+                    >
+                        ×
+                    </button>
+                </div>
+
+                <div id="teamPointsModalBody" class="modal-body"></div>
+            </div>
+        </div>
             <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="playerModalTitle">
                 <div class="modal-header">
                     <h2 id="playerModalTitle">Player</h2>
@@ -279,7 +313,7 @@
                         <input type="text" id="exportEventTitle" placeholder="e.g. The Best Event Ever!">
                     </div>
                     <p class="help-text">Edit team display names below if you want different labels on the poster.
-                        These overrides apply to the exported image only  they don't change your teams.</p>
+                        These overrides apply to the exported image only - they don't change your teams.</p>
                     <div id="exportTeamNames" class="export-team-names"></div>
                     <div class="input-actions">
                         <button type="button" id="exportDoWinners" class="btn btn-primary">Download Winners PNG</button>
