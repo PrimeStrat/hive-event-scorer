@@ -1,6 +1,6 @@
 {
     "name": "hive-event-scorer",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Automated scoring for Hive Minecraft events with live chat log capture using OderSo's chat logger",
     "main": "src/main.js",
     "author": "PrimeStrat",
