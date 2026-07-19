@@ -55,7 +55,7 @@
             const clean = ChatUtils.stripColorCodes(rawLine);
             if (!clean) return false;
 
-            // Offline/online — only relevant after the game has started.
+            // Offline/online  only relevant after the game has started.
             if (/^.+?\s+has gone offline\.?$/i.test(clean)) {
                 if (this.gameHasStarted) {
                     const name = clean.match(/^(.+?)\s+has gone offline\.?$/i)[1].trim();
@@ -65,7 +65,7 @@
                 }
                 return true;
             }
-            // Swallow "has come online" — coming back doesn't undo the elimination.
+            // Swallow "has come online"  coming back doesn't undo the elimination.
             if (/^.+?\s+has come online\.?$/i.test(clean)) return true;
 
             if (/game over!?/i.test(clean)) {
@@ -138,7 +138,7 @@
          * "auto-add unknown players" setting is on, drop them into the catch-all UNKNOWN
          * team so their events still score. Returns null when unresolved and the setting
          * is off. Only call this with names captured by high-confidence detectors (kills,
-         * bed breaks, placement lines) — never raw text — to avoid inventing players.
+         * bed breaks, placement lines)  never raw text  to avoid inventing players.
          */
         resolvePlayerTeam(playerName) {
             const team = this.state.findPlayerTeam(playerName);
@@ -225,7 +225,7 @@
             if (teamName) {
                 // Validate: if the name-matched team has zero eliminated players but
                 // another unresolved team has all its players eliminated, the in-game
-                // color is different from the app team name — use structural inference.
+                // color is different from the app team name  use structural inference.
                 const matched = this.state.teams[teamName];
                 const matchedElim = matched ? (matched.players || []).filter(p => {
                     const ps = this.state.playerStats[p];

@@ -39,7 +39,7 @@
             this.updateUI();
             // No crash/emergency backup and no beforeunload prompt: we rely on the
             // explicit Save/Load JSON system. The host is gently reminded to save
-            // (via a toast) when they start a new game — see startNewGame().
+            // (via a toast) when they start a new game  see startNewGame().
         }
 
         // ================= event wiring =================
@@ -144,7 +144,7 @@
 
         /**
          * A file was dropped. JSON loads as save data; a .txt is treated as a chat
-         * log — we infer the gamemode from the filename, preselect it, load the text
+         * log  we infer the gamemode from the filename, preselect it, load the text
          * into the chat box, and process it automatically.
          */
         handleDroppedFile(file) {

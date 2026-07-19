@@ -1,5 +1,5 @@
 /* =====================================================================
-   Hive Event Scorer — components
+   Hive Event Scorer  components
    Single component sheet (replaces the old main/teams/stats/settings sheets).
    ===================================================================== */
 
@@ -243,7 +243,7 @@ textarea { resize: vertical; min-height: 90px; }
 .remove-player-btn:hover { background: rgba(248,113,113,.15); }
 
 /* =====================================================================
-   STATISTICS — redesigned: compact, readable, click-through to detail
+   STATISTICS  redesigned: compact, readable, click-through to detail
    ===================================================================== */
 
 /* Event standings: team blocks each listing their players' totals */

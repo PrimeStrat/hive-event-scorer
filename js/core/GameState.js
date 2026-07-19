@@ -283,8 +283,8 @@
         }
 
         /**
-         * Wipe all scoring statistics — current game, scores, per-player stats,
-         * elimination/finish tracking, completed game history, and undo/redo — while
+         * Wipe all scoring statistics  current game, scores, per-player stats,
+         * elimination/finish tracking, completed game history, and undo/redo  while
          * KEEPING team rosters (teams are only cleared from the Teams tab). Also
          * clears the persisted game/event localStorage keys so the wipe survives
          * reload; the hive_teams key is left intact.

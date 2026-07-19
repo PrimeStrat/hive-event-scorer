@@ -69,7 +69,7 @@
             const ctx = canvas.getContext('2d');
 
             ctx.fillStyle = C.bg; ctx.fillRect(0, 0, w, h);
-            header(ctx, w, eventTitle, 'Player Standings — total points');
+            header(ctx, w, eventTitle, 'Player Standings  total points');
 
             players.forEach((p, i) => {
                 const y = top + i * rowH;

@@ -75,7 +75,7 @@
         }
 
         detectFirstPersonKill(clean) {
-            // In BedWars, "You killed X" is a regular kill (victim respawns) — no kill point.
+            // In BedWars, "You killed X" is a regular kill (victim respawns)  no kill point.
             // Only FINAL KILLs award kill points. We still mark the victim's death so
             // player stats stay accurate, but skip the kill credit for the local player.
             let m = clean.match(/»?\s*You killed\s+(.+?)\s*$/i);
@@ -87,7 +87,7 @@
                 }
                 return true;
             }
-            // "You were killed by <killer>" — regular kill against local player; no kill pt to killer.
+            // "You were killed by <killer>"  regular kill against local player; no kill pt to killer.
             m = clean.match(/»?\s*You were killed by\s+(.+?)\.?\s*$/i);
             if (m) {
                 const victim = this.resolvePlayerName('You');
