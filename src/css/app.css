@@ -380,6 +380,12 @@ textarea { resize: vertical; min-height: 90px; }
 .modal-close { background: transparent; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; line-height: 1; }
 .modal-close:hover { color: var(--text); }
 .modal-body { padding: 20px; }
+
+.load-session-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.load-session-item { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; }
+.load-session-item:hover { border-color: var(--border-strong); background: rgba(255, 255, 255, .04); }
+.load-session-name { font-weight: 600; }
+.load-session-date { color: var(--text-muted); font-size: .8rem; white-space: nowrap; }
 .pd-summary { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 16px; }
 .pd-summary .pd-metric { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 16px; text-align: center; }
 .pd-metric .v { font-size: 1.4rem; font-weight: 800; color: var(--hive-yellow); }

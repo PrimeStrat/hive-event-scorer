@@ -418,12 +418,11 @@
                             <h4>Team Scores</h4>
                             ${editing ? `
                             <div class="game-score-editor-actions">
-                                <button type="button" class="btn btn-success btn-small" data-action="save-game-scores" data-game-id="${game.id}">Save Scores</button>
-                                <button type="button" class="btn btn-secondary btn-small" data-action="cancel-game-scores" data-game-id="${game.id}">Cancel</button>
+                                <button type="button" class="btn btn-success btn-small" data-action="save-game-scores" data-game-id="${game.id}">Done</button>
                             </div>` : `
                             <button type="button" class="btn btn-info btn-small" data-action="edit-game-scores" data-game-id="${game.id}">Edit Scores</button>`}
                         </div>
-                        ${editing ? '<p class="game-score-editor-help">Adjust the saved score for any team. Totals refresh on save.</p>' : ''}
+                        ${editing ? '<p class="game-score-editor-help">Adjust the saved score for any team. Changes save automatically.</p>' : ''}
                         ${teams.map(([teamName, data], i) => {
                             const color = this.teamColor(teamName);
                             return `

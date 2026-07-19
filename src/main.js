@@ -300,6 +300,31 @@ ipcMain.handle('save-json', (event, filename, text) => {
     }
 });
 
+ipcMain.handle('saves-list', () => {
+    const dir = path.join(dataDir(), 'saves');
+    try {
+        return fs.readdirSync(dir)
+            .filter(f => /\.json$/i.test(f))
+            .map(f => {
+                const file = path.join(dir, f);
+                return { name: f, modified: fs.statSync(file).mtimeMs };
+            })
+            .sort((a, b) => b.modified - a.modified);
+    } catch (err) {
+        return [];
+    }
+});
+
+ipcMain.handle('saves-read', (event, name) => {
+    const base = safeFileName(name);
+    if (!base) return null;
+    try {
+        return fs.readFileSync(path.join(dataDir(), 'saves', base), 'utf8');
+    } catch (err) {
+        return null;
+    }
+});
+
 ipcMain.handle('save-image', async (event, filename, bytes) => {
     const res = await dialog.showSaveDialog(mainWindow, {
         title: 'Save poster',
