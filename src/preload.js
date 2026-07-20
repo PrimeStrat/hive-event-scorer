@@ -66,21 +66,6 @@ contextBridge.exposeInMainWorld('hiveDesktop', {
      */
     saveJson: (filename, text) => ipcRenderer.invoke('save-json', filename, text),
 
-    saves: {
-        /**
-         * List saved session files in the app data saves folder, newest first.
-         * @returns {Promise<Array<{name: string, modified: number}>>} Save entries.
-         */
-        list: () => ipcRenderer.invoke('saves-list'),
-
-        /**
-         * Read a saved session file's JSON text.
-         * @param {string} name Save file name.
-         * @returns {Promise<string|null>} File text or null.
-         */
-        read: name => ipcRenderer.invoke('saves-read', name)
-    },
-
     /**
      * Save PNG bytes via a native save dialog.
      * @param {string} filename Suggested file name.

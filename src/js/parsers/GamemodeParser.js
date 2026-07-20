@@ -30,7 +30,7 @@
         }
 
         get selfDeathPhrases() {
-            return ['themselves', 'did an oopsie', 'you died', 'forgot their parachute', 'fell off',
+            return ['did an oopsie', 'you died', 'forgot their parachute', 'fell off',
                 'fell to their demise', 'said goodbye to this cruel world', "got ratio'd",
                 'made their last dance move', "ain't stayin' alive", 'has two left feet',
                 "rock 'n' rolled into the void"];
@@ -90,8 +90,23 @@
          */
         onGameOver(/* clean */) {
             this.state.currentGameCompleted = true;
-            if (this.features.individualSurvival) this.engine.finalizePlayerPlacements();
-            else if (this.features.teamElimination) this.engine.finalizeFromSurvival();
+
+            // PvP solo placement scoring uses enemy-relative survival,
+            // not normal global player placements.
+            if (
+                this.features.pvp &&
+                this.points.enableSoloPlacements
+            ) {
+                this.engine.finalizePvpIndividualPlacements();
+            }
+            else if (this.features.individualSurvival) {
+                this.engine.finalizePlayerPlacements();
+            }
+
+            // PvP team placement scoring still happens separately.
+            if (this.features.teamElimination) {
+                this.engine.finalizeFromSurvival();
+            }
         }
 
         /**
@@ -129,15 +144,8 @@
                 return this.recordKill(killer, victim);
             }
             if (players.length === 1) {
-                const name = players[0];
-                // Self-kill broadcasts name the player twice ("X was slain by X").
-                const first = ChatUtils.indexOfName(clean, name);
-                const rest = clean.slice(first + name.length);
-                if (ChatUtils.indexOfName(rest, name) !== -1) {
-                    return this.recordDeath(name);
-                }
                 if (this.selfDeathPhrases.some(p => lower.includes(p))) {
-                    return this.recordDeath(name);
+                    return this.recordDeath(players[0]);
                 }
             }
             return false;
@@ -230,11 +238,10 @@
          * @returns {string} 'kill'.
          */
         recordKill(killerName, victimName) {
-            const canonicalKiller = this.state.resolveCanonicalPlayer(killerName);
-            const canonicalVictim = this.state.resolveCanonicalPlayer(victimName);
-            if (canonicalKiller === canonicalVictim) return this.recordDeath(victimName);
             const killerTeam = this.resolvePlayerTeam(killerName);
             const victimTeam = this.resolvePlayerTeam(victimName);
+            const canonicalKiller = this.state.resolveCanonicalPlayer(killerName);
+            const canonicalVictim = this.state.resolveCanonicalPlayer(victimName);
             if (killerTeam) {
                 const ks = this.state.getOrCreatePlayerStats(canonicalKiller, killerTeam);
                 ks.kills++;
@@ -332,8 +339,16 @@
             }
             this.state.addLog(`${teamName} eliminated (${this.state.eliminationOrder.length} out)`, 'warning');
             if (!this.features.individualSurvival) {
-                this.engine.recordTeamEliminationPlacement(teamName);
-                this.engine.tryFinalize();
+                const features = this.features;
+
+                if (features.pvp && features.teamElimination) {
+                    // PvP placements are finalised at Game OVER so tied surviving teams
+                    // can share placement correctly.
+                    this.engine.tryFinalize();
+                } else {
+                    this.engine.recordTeamEliminationPlacement(teamName);
+                    this.engine.tryFinalize();
+                }
             }
             return true;
         }

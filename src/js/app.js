@@ -36,17 +36,6 @@
             this.syncGamemodeFromSelection();
             this.updateUI();
             this.applyDefaultPreset();
-            this.startAutosave();
-        }
-
-        /**
-         * Periodically persist state to the app data store, and flush once more
-         * when the window closes.
-         * @returns {void}
-         */
-        startAutosave() {
-            setInterval(() => this.state.syncToStorage(), 30000);
-            window.addEventListener('beforeunload', () => this.state.syncToStorage());
         }
 
         /**
@@ -103,17 +92,8 @@
             });
 
             this.on('saveBtn', 'click', () => this.saveData());
-            this.on('loadBtn', 'click', () => this.openLoadModal());
+            this.on('loadBtn', 'click', () => document.getElementById('fileInput').click());
             this.on('fileInput', 'change', e => this.importJSON(e));
-            this.on('loadModalClose', 'click', () => this.closeModal('loadModal'));
-            this.on('loadBrowseBtn', 'click', () => {
-                this.closeModal('loadModal');
-                document.getElementById('fileInput').click();
-            });
-            this.on('loadSessionList', 'click', e => {
-                const item = e.target.closest('.load-session-item');
-                if (item) this.loadSavedSession(item.dataset.save);
-            });
             this.on('clearLog', 'click', () => { this.state.activityLog = []; this.scoreboard.renderActivityLog(); });
 
             this.on('undoBtn', 'click', () => this.performUndo());
@@ -121,10 +101,7 @@
             this.on('addBedBreak', 'click', () => this.addManualBedBreak());
 
             const gh = document.getElementById('gameHistory');
-            if (gh) {
-                gh.addEventListener('click', e => this.handleGameHistoryActions(e));
-                gh.addEventListener('change', e => this.applyEditedGameScore(e));
-            }
+            if (gh) gh.addEventListener('click', e => this.handleGameHistoryActions(e));
 
             this.on('exportPlayersPng', 'click', () => this.openExportModal());
             this.on('exportWinnersPng', 'click', () => this.openExportModal());
@@ -139,7 +116,7 @@
                 'click',
                 () => this.closeModal('teamPointsModal')
             );
-            ['playerModal', 'teamPointsModal', 'exportModal', 'loadModal'].forEach(id => {
+            ['playerModal', 'teamPointsModal', 'exportModal'].forEach(id => {
                 const m = document.getElementById(id);
                 if (m) m.addEventListener('click', e => { if (e.target === m) this.closeModal(id); });
             });
@@ -148,7 +125,6 @@
                     this.closeModal('playerModal');
                     this.closeModal('teamPointsModal');
                     this.closeModal('exportModal');
-                    this.closeModal('loadModal');
                 }
             });
 
@@ -506,7 +482,7 @@
             this.updateUI();
 
             if (hadGame) {
-                H.Toast.show('Previous game saved to history. Progress autosaves; Save JSON only to archive this session.',
+                H.Toast.show('Previous game saved to history. Remember to Save JSON to keep tournament progress.',
                     { title: 'New game started', type: 'warning', duration: 6000 });
             }
         }
@@ -549,25 +525,10 @@
          */
         saveGameToHistory() {
             this.state.pushUndo('saveGameToHistory');
-            this.finalizeTiedPvpGame();
             if (this.state.saveGameToHistory()) {
                 this.state.syncToStorage();
                 this.state.addLog(`Game saved to history: ${this.state.currentGame.gamemode}`, 'info');
             }
-        }
-
-        /**
-         * Close out a PvP game that ended without a detected winner (a tie):
-         * survivors are placed Block Drop-style before the game is archived.
-         * @returns {void}
-         */
-        finalizeTiedPvpGame() {
-            const features = this.points.featuresFor(this.state.gamemode) || {};
-            if (!features.pvp || this.state.currentGameCompleted) return;
-            if (!this.state.currentGame || !this.state.hasActiveScores()) return;
-            if (features.individualSurvival) this.engine.finalizePlayerPlacements();
-            else this.engine.finalizeFromSurvival();
-            this.state.addLog('Tie detected - remaining placements scored from surviving players', 'info');
         }
 
         /**
@@ -845,28 +806,6 @@
         }
 
         /**
-         * Apply one manually edited history score immediately: persist it and
-         * refresh the standings without rebuilding the open editor.
-         * @param {Event} e Change event from the game-history list.
-         * @returns {void}
-         */
-        applyEditedGameScore(e) {
-            if (!e.target.classList || !e.target.classList.contains('score-editor-input')) return;
-            const card = e.target.closest('.game-history-card');
-            if (!card) return;
-            const idx = this.state.gameHistory.findIndex(g => String(g.id) === String(card.dataset.gameId));
-            if (idx === -1) return;
-            const scores = this.state.gameHistory[idx].scores;
-            const team = e.target.dataset.team;
-            if (!scores[team]) return;
-            scores[team].score = parseInt(e.target.value, 10) || 0;
-            this.state.syncToStorage();
-            this.statsView.renderEventStandings();
-            this.statsView.renderPlayerTotals();
-            this.scoreboard.renderAll();
-        }
-
-        /**
          * Open the player-detail modal.
          * @param {string} name Player name.
          * @returns {void}
@@ -1070,43 +1009,6 @@
         saveData() {
             this.download(`hive-event-${Date.now()}.json`, this.state.serialize({ saveDate: new Date().toISOString() }));
             this.state.addLog('Data saved to JSON file', 'success');
-        }
-
-        /**
-         * Open the session picker listing saves from the app data folder;
-         * falls back to the file browser outside the desktop app.
-         * @returns {Promise<void>} Resolves when shown.
-         */
-        async openLoadModal() {
-            const bridge = global.hiveDesktop;
-            if (!bridge || !bridge.saves) { document.getElementById('fileInput').click(); return; }
-            const host = document.getElementById('loadSessionList');
-            if (!host) return;
-            const saves = await bridge.saves.list();
-            host.innerHTML = saves.length ? saves.map(s => `
-                <div class="load-session-item" data-save="${this.statsView.escapeHtml(s.name)}">
-                    <span class="load-session-name">${this.statsView.escapeHtml(s.name)}</span>
-                    <span class="load-session-date">${new Date(s.modified).toLocaleString()}</span>
-                </div>`).join('')
-                : '<p class="empty-state">No saved sessions yet. Use Save JSON to archive one.</p>';
-            document.getElementById('loadModal').classList.add('open');
-        }
-
-        /**
-         * Load a saved session file from the app data saves folder.
-         * @param {string} name Save file name.
-         * @returns {Promise<void>} Resolves when loaded.
-         */
-        async loadSavedSession(name) {
-            const bridge = global.hiveDesktop;
-            if (!bridge || !bridge.saves) return;
-            const text = await bridge.saves.read(name);
-            this.closeModal('loadModal');
-            if (!text) {
-                H.Toast.show(`Could not read "${name}".`, { title: 'Load failed', type: 'warning' });
-                return;
-            }
-            this.loadJsonText(text);
         }
 
         /**

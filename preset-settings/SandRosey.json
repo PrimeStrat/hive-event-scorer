@@ -6,6 +6,9 @@
       "3rd place": 128,
       "4th place": 112,
       "5th place": 96,
+      "First full team finish": 60,
+      "Second full team finish": 40,
+      "Third full team finish": 20,
       "6th place": 80,
       "7th place": 72,
       "8th place": 64,
@@ -15,25 +18,63 @@
       "12th place": 32,
       "13th place": 24,
       "14th place": 16,
-      "15th place": 8,
-      "First full team finish": 30,
-      "Second full team finish": 20,
-      "Third full team finish": 10
+      "15th place": 8
     },
     "SkyWars": {
-      "1st place": 80,
-      "2nd place": 60,
-      "3rd place": 40,
+      "1st place": 160,
+      "2nd place": 144,
+      "3rd place": 128,
+      "Indiv 1st place": 45,
+      "Indiv 2nd place": 39,
+      "Indiv 3rd place": 33,
       "Kill": 45,
-      "Kill Leader": 45,
-      "First Blood": 0
+      "Kill Leader": 60,
+      "First Blood": 0,
+      "Mystery Chest": 0,
+      "Indiv 4th place": 27,
+      "Indiv 5th place": 24,
+      "Indiv 6th place": 21,
+      "Indiv 7th place": 18,
+      "Indiv 8th place": 15,
+      "Indiv 9th place": 12,
+      "Indiv 10th place": 9,
+      "Indiv 11th place": 6,
+      "Indiv 12th place": 3,
+      "Bed Break": 60,
+      "First full team finish": 60,
+      "Second full team finish": 40,
+      "Third full team finish": 20,
+      "4th place": 112,
+      "5th place": 96,
+      "6th place": 80,
+      "7th place": 72,
+      "8th place": 64,
+      "9th place": 56,
+      "10th place": 48,
+      "11th place": 40,
+      "12th place": 32,
+      "13th place": 24,
+      "14th place": 16,
+      "15th place": 8
     },
     "Survival Games": {
-      "1st place": 80,
-      "2nd place": 60,
-      "3rd place": 40,
+      "1st place": 25,
+      "2nd place": 0,
+      "3rd place": 0,
       "Kill": 45,
-      "First Blood": 50
+      "First Blood": 60,
+      "Indiv 1st place": 45,
+      "Indiv 2nd place": 39,
+      "Indiv 3rd place": 33,
+      "Indiv 4th place": 27,
+      "Indiv 5th place": 24,
+      "Indiv 6th place": 21,
+      "Indiv 7th place": 18,
+      "Indiv 8th place": 15,
+      "Indiv 9th place": 12,
+      "Indiv 10th place": 9,
+      "Indiv 11th place": 6,
+      "Indiv 12th place": 3
     },
     "BedWars": {
       "1st place": 80,
@@ -41,7 +82,19 @@
       "3rd place": 40,
       "Kill": 45,
       "Bed Break": 60,
-      "First Blood": 0
+      "First Blood": 0,
+      "Indiv 1st place": 45,
+      "Indiv 2nd place": 39,
+      "Indiv 3rd place": 33,
+      "Indiv 4th place": 27,
+      "Indiv 5th place": 24,
+      "Indiv 6th place": 21,
+      "Indiv 7th place": 18,
+      "Indiv 8th place": 15,
+      "Indiv 9th place": 12,
+      "Indiv 10th place": 9,
+      "Indiv 11th place": 6,
+      "Indiv 12th place": 3
     },
     "Gravity": {
       "1st place": 160,
@@ -49,6 +102,9 @@
       "3rd place": 128,
       "4th place": 112,
       "5th place": 96,
+      "First full team finish": 60,
+      "Second full team finish": 40,
+      "Third full team finish": 20,
       "6th place": 80,
       "7th place": 72,
       "8th place": 64,
@@ -58,10 +114,7 @@
       "12th place": 32,
       "13th place": 24,
       "14th place": 16,
-      "15th place": 8,
-      "First full team finish": 30,
-      "Second full team finish": 20,
-      "Third full team finish": 10
+      "15th place": 8
     },
     "BlockDrop": {
       "1st place": 160,
@@ -69,6 +122,9 @@
       "3rd place": 128,
       "4th place": 112,
       "5th place": 96,
+      "Last team standing": 30,
+      "Second last team standing": 20,
+      "Third last team standing": 10,
       "6th place": 80,
       "7th place": 72,
       "8th place": 64,
@@ -78,10 +134,7 @@
       "12th place": 32,
       "13th place": 24,
       "14th place": 16,
-      "15th place": 8,
-      "Last team standing": 30,
-      "Second last team standing": 20,
-      "Third last team standing": 10
+      "15th place": 8
     },
     "Block Party": {
       "1st place": 160,
@@ -89,6 +142,9 @@
       "3rd place": 128,
       "4th place": 112,
       "5th place": 96,
+      "Last team standing": 60,
+      "Second last team standing": 40,
+      "Third last team standing": 20,
       "6th place": 80,
       "7th place": 72,
       "8th place": 64,
@@ -98,10 +154,7 @@
       "12th place": 32,
       "13th place": 24,
       "14th place": 16,
-      "15th place": 8,
-      "Last team standing": 30,
-      "Second last team standing": 20,
-      "Third last team standing": 10
+      "15th place": 8
     }
   },
   "gamemodeFeatures": {
@@ -119,7 +172,8 @@
       "individualFinish": false,
       "teamFinish": false,
       "individualSurvival": false,
-      "teamElimination": true
+      "teamElimination": true,
+      "pvp": true
     },
     "Survival Games": {
       "kills": true,
@@ -127,7 +181,8 @@
       "individualFinish": false,
       "teamFinish": false,
       "individualSurvival": false,
-      "teamElimination": true
+      "teamElimination": true,
+      "pvp": true
     },
     "BedWars": {
       "kills": true,
@@ -135,14 +190,15 @@
       "individualFinish": false,
       "teamFinish": false,
       "individualSurvival": false,
-      "teamElimination": true
+      "teamElimination": true,
+      "pvp": true
     },
     "Gravity": {
       "kills": false,
       "bedBreaks": false,
       "individualFinish": true,
       "teamFinish": true,
-      "individualSurvival": true,
+      "individualSurvival": false,
       "teamElimination": false
     },
     "BlockDrop": {
@@ -169,7 +225,12 @@
     "bedBreak": "§c§l» Your bed was destroyed by [PLAYER]",
     "individualFinish": "§a§l» [PLAYER] has finished in [N]th place"
   },
-  "myIgn": "Qv19v",
+  "myIgn": "",
+  "autoAddUnknownPlayers": true,
+  "enableKillLeader": true,
+  "enableExtendedTeamBonuses": true,
+  "enableSoloPlacements": true,
+  "enableChestPoints": false,
   "blockPartyTieMode": "shared-placement",
-  "autoAddUnknownPlayers": true
+  "pvpTeamTieMode": "shared-placement"
 }

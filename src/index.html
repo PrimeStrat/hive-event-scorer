@@ -291,6 +291,14 @@
                 <div id="teamPointsModalBody" class="modal-body"></div>
             </div>
         </div>
+            <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="playerModalTitle">
+                <div class="modal-header">
+                    <h2 id="playerModalTitle">Player</h2>
+                    <button type="button" id="playerModalClose" class="modal-close" aria-label="Close dialog">×</button>
+                </div>
+                <div id="playerModalBody" class="modal-body"></div>
+            </div>
+        </div>
 
         <!-- Export poster modal: edit event title + team display names before export -->
         <div id="exportModal" class="modal" aria-hidden="true">
@@ -305,30 +313,11 @@
                         <input type="text" id="exportEventTitle" placeholder="e.g. The Best Event Ever!">
                     </div>
                     <p class="help-text">Edit team display names below if you want different labels on the poster.
-                        These overrides apply to the exported image only - they don't change your teams.</p>
+                        These overrides apply to the exported image only — they don't change your teams.</p>
                     <div id="exportTeamNames" class="export-team-names"></div>
                     <div class="input-actions">
                         <button type="button" id="exportDoWinners" class="btn btn-primary">Download Winners PNG</button>
                         <button type="button" id="exportDoPlayers" class="btn btn-info">Download Players PNG</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Load previous session modal: lists saves from the app data folder -->
-        <div id="loadModal" class="modal" aria-hidden="true">
-            <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="loadModalTitle">
-                <div class="modal-header">
-                    <h2 id="loadModalTitle">Load Previous Session</h2>
-                    <button type="button" id="loadModalClose" class="modal-close" aria-label="Close dialog">×</button>
-                </div>
-                <div class="modal-body">
-                    <p class="help-text">Current progress autosaves; load a save only to return to a previous
-                        session.</p>
-                    <div id="loadSessionList" class="load-session-list"></div>
-                    <div class="input-actions">
-                        <button type="button" id="loadBrowseBtn" class="btn btn-secondary btn-small">Browse for
-                            file...</button>
                     </div>
                 </div>
             </div>
