@@ -14,8 +14,13 @@ Made by Prime Software Development (PrimeStrat). Not affiliated with The Hive.
 - Custom point values, presets and gamemodes
 - PNG posters of the winners and player standings
 
+## Download
+Get `Hive Event Scorer <version>.exe` from the [latest release](https://github.com/PrimeStrat/hive-event-scorer/releases/latest).
+There is nothing to install. The exe is the whole app: save it anywhere and run it.
+Your teams, games and settings are saved in `%LOCALAPPDATA%\HiveEventScorer`, so they stay when you update.
+
 ## How to use
-1. Open the app.
+1. Run the exe.
 2. Go to **Teams** and put each player on a team.
 3. Go to **Scorer**, pick the gamemode, paste the chat log and press **Process Chat**.
    You can also turn on **Live Capture** to score the game while you play.

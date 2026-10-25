@@ -38,8 +38,7 @@
         "win": {
             "icon": "src/Assets/Icon.ico",
             "target": [
-                "portable",
-                "nsis"
+                "portable"
             ]
         }
     },
