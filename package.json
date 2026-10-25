@@ -1,10 +1,16 @@
 {
     "name": "hive-event-scorer",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "description": "Automated scoring for Hive Minecraft events with live chat log capture using OderSo's chat logger",
-    "main": "src/main.js",
+    "main": "src/Main.js",
     "author": "PrimeStrat",
     "license": "MIT",
+    "contributors": [
+        {
+            "name": "SandRosey",
+            "url": "https://github.com/Sand2075"
+        }
+    ],
     "scripts": {
         "start": "electron .",
         "build": "electron-builder --win"
@@ -24,12 +30,12 @@
         ],
         "extraResources": [
             {
-                "from": "preset-settings",
-                "to": "preset-settings"
+                "from": "PresetSettings",
+                "to": "PresetSettings"
             }
         ],
         "win": {
-            "icon": "src/assets/icon.ico",
+            "icon": "src/Assets/Icon.ico",
             "target": [
                 "portable",
                 "nsis"
