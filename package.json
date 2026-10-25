@@ -14,6 +14,7 @@
     "scripts": {
         "start": "electron .",
         "build": "electron-builder --win",
+        "release": "node Scripts/Release.js",
         "release": "node Scripts/Release.js"
     },
     "devDependencies": {
