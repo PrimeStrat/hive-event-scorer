@@ -1,56 +1,68 @@
 # Hive Event Scorer
 
-This is an advanced chat interpreter that allows Hive Events to automatically calculate and score their events!
+Hive Event Scorer reads Hive chat logs and scores your event for you.
+It counts kills, placements and team bonuses, and keeps totals for the whole event.
 
-### Features
-- Team management and scoring
-- Automatically calculate event stats
-- Score editor
-- Customizable settings
-- Clean and intuitive interface
+Made by Prime Software Development (PrimeStrat). Not affiliated with The Hive.
 
-### How To Use
-1. Open `index.html` in your web browser after downloading the project (no server or build step required)
-2. Navigate to the **Teams** tab to add and manage team rosters (assign each in-game player to a team)
-3. On the **Scorer** tab, pick the gamemode and paste the chat log, then **Process Chat**
-4. View scores and per-player performance on the **Stats** tab
-5. Adjust point values, detection, and your own IGN on the **Settings** tab
+## Features
+- Team and substitute management
+- Automatic scoring from chat logs
+- Live capture from the OderSo client chat log
+- Event totals, per-player breakdowns and game history
+- Score editor for finished games
+- Custom point values, presets and gamemodes
+- PNG posters of the winners and player standings
 
-> Set **My IGN** in Settings so first-person log lines ("You killed ...", "You finished in 1st place")
-> are attributed to you. Leave it blank to skip those lines.
+## How to use
+1. Open the app.
+2. Go to **Teams** and put each player on a team.
+3. Go to **Scorer**, pick the gamemode, paste the chat log and press **Process Chat**.
+   You can also turn on **Live Capture** to score the game while you play.
+4. See the results on **Totals** and **History**.
+5. Change point values and your own IGN on **Settings**.
 
-### Supported gamemodes
-BedWars, SkyWars, Survival Games, DeathRun, Gravity, Block Drop, and Block Party - each interpreted by a
-dedicated parser tuned to The Hive's real chat formats. Combat kills are detected structurally, so any
-flavour kill verb ("rolled ... beyond space and time", "ten hearted", "silenced", ...) is handled
-automatically without a hard-coded list.
+Set **My IGN** in Settings so lines like "You killed ..." or "You finished in 1st place" count for you.
+Leave it blank to skip those lines.
 
-### Statistics & exports
-The Statistics tab shows cumulative event results: **event standings** (team totals, each listing its
-players' totals) and a compact **all-players** list - click any player to open a modal with their full
-per-game breakdown and placements. (The live current game and point record stay on the Scorer tab.)
+## Supported gamemodes
+BedWars, SkyWars, Survival Games, DeathRun, Gravity, Block Drop and Block Party.
+Kills are found by player names, so any kill message works without a word list.
+BedWars bed breaks are added by hand on the Scorer tab, because the log does not show who broke other beds.
 
-**Export PNG** opens a dialog where you type the event title and tweak team display names, then download two
-shareable posters - player standings and event winners - drawn on a canvas with no external libraries.
-Manual score edits are made per game via "Edit Scores" in Game History. **Wipe Statistics** clears all
-games/scores/player stats but keeps your teams (teams are only cleared from the Teams tab).
+## Importing logs
+Drag a `.txt` chat log onto the window. The gamemode is guessed from the file name
+(for example `bedwars.txt`, `sg.txt` or `block party.txt`), a new game starts, and the log is scored.
+Drag a `.json` save file to load event data.
 
-### Importing logs
-Drag a `.txt` chat log onto the window: the gamemode is inferred from the filename (e.g. `bedwars.txt`,
-`skywars 1.txt`, `sg.txt`, `block party.txt`), a new game is started, and the log is processed automatically.
-Dropping a `.json` file loads tournament data instead.
+Saving is done with **Save JSON** and **Load JSON**. Starting a new game moves the last game into history.
 
-Saving is explicit (Save/Load JSON) - there is no crash/emergency backup. Starting a new game rolls the
-previous one into history and shows a brief, dismissible reminder to save tournament progress.
+## License
+This project uses the MIT License. See `LICENSE`.
+Anyone can use, copy, change, fork, sell or share it, for any reason.
+You must keep the copyright and license notice, which credits Prime Software Development
+and the project contributors, in every copy or fork.
 
-### Project structure
-```
-index.html            Single page; tabs switch client-side (no reload)
-css/                  global.css (tokens/base) + app.css (components)
-js/
-  core/               ChatUtils, Toast, PosterExport, PointSystem, GameState, ScoringEngine
-  parsers/            GamemodeParser (base) + one subclass per gamemode + registry
-  renderers/          Scoreboard / Teams / Stats / Settings views
-  app.js              Controller: wires the DOM to the engine and renderers
-tests/                Node harnesses (no dependencies)
-```
+## Credits
+Created by Prime Software Development (PrimeStrat).
+
+This project grows with help from the community. Thank you to everyone who tests it,
+reports bugs and sends changes.
+
+Contributors:
+- SandRosey ([Sand2075](https://github.com/Sand2075)) - the preset system and frequent bug reports
+
+## Disclaimer
+This software is provided as-is, with no warranty of any kind.
+Prime Software Development and all contributors take no responsibility for how it is used or misused,
+or for anything that happens as a result of using it. This includes wrong scores, lost data,
+or any other damage or loss. You use it at your own risk.
+
+## Contributing
+Everyone is welcome to help.
+- Fork the project and change it any way you like.
+- Send a pull request to share a fix or a new feature.
+- Open an issue to report a bug or ask for a feature.
+
+By sending a pull request, you agree that your work is shared under the same MIT License.
+Contributors are added to the Credits list.
