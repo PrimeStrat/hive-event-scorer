@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch annotated tags
+        run: git fetch --force --tags
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install
+        run: npm install
+
+      - name: Build Windows exes
+        run: npx electron-builder --win --publish never
+
+      - name: Write release notes
+        shell: bash
+        run: node Scripts/ReleaseNotes.js "$GITHUB_REF_NAME" > release-notes.md
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+        run: |
+          title=$(git tag -l --format='%(contents:subject)' "$GITHUB_REF_NAME")
+          flags=""
+          case "$GITHUB_REF_NAME" in v0.*|*-*) flags="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" dist/*.exe --verify-tag --title "${title:-$GITHUB_REF_NAME}" --notes-file release-notes.md $flags
