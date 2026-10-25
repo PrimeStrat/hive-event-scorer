@@ -8,7 +8,6 @@ Made by Prime Software Development (PrimeStrat). Not affiliated with The Hive.
 ## Features
 - Team and substitute management
 - Automatic scoring from chat logs
-- Live capture from the OderSo client chat log
 - Event totals, per-player breakdowns and game history
 - Score editor for finished games
 - Custom point values, presets and gamemodes
