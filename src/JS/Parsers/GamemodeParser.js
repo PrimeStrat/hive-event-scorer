@@ -7,8 +7,14 @@
 
     const ChatUtils = global.Hive.ChatUtils;
 
+    const SELF_DEATH_PHRASES = ['did an oopsie', 'you died', 'forgot their parachute', 'fell off',
+        'fell to their demise', 'said goodbye to this cruel world', "got ratio'd",
+        'made their last dance move', "ain't stayin' alive", 'has two left feet',
+        "rock 'n' rolled into the void"];
+
     class GamemodeParser {
         /**
+         * Create a parser over shared state.
          * @param {GameState} state Shared game state.
          * @param {ScoringEngine} engine Scoring engine.
          * @param {PointSystem} points Point tables and toggles.
@@ -19,21 +25,28 @@
             this.points = points;
         }
 
-        get name() { return 'Base'; }
+        /**
+         * Gamemode name this parser handles.
+         * @returns {string} Gamemode name.
+         */
+        get name() {
+            return 'Base';
+        }
 
         /**
          * Feature flags for this gamemode.
-         * @returns {Object} Feature flags.
+         * @returns {GamemodeFeatures} Feature flags.
          */
         get features() {
             return this.points.featuresFor(this.name) || {};
         }
 
+        /**
+         * Phrases that mean a lone named player died without a killer.
+         * @returns {string[]} Lowercase phrases.
+         */
         get selfDeathPhrases() {
-            return ['did an oopsie', 'you died', 'forgot their parachute', 'fell off',
-                'fell to their demise', 'said goodbye to this cruel world', "got ratio'd",
-                'made their last dance move', "ain't stayin' alive", 'has two left feet',
-                "rock 'n' rolled into the void"];
+            return SELF_DEATH_PHRASES;
         }
 
         /**
@@ -48,7 +61,8 @@
         }
 
         /**
-         * Parse a single raw chat line.
+         * Parse a single raw chat line. Going offline mid-game is a permanent
+         * elimination; coming back online does not undo it.
          * @param {string} rawLine Raw chat line.
          * @returns {boolean} True when a scoring-relevant event was recorded.
          */
@@ -57,56 +71,46 @@
             const clean = ChatUtils.stripColorCodes(rawLine);
             if (!clean) return false;
 
-            // Going offline mid-game is a permanent elimination; coming back online
-            // does not undo it.
-            if (/^.+?\s+has gone offline\.?$/i.test(clean)) {
+            const offline = clean.match(/^(.+?)\s+has gone offline\.?$/i);
+            if (offline) {
                 if (this.gameHasStarted) {
-                    const name = clean.match(/^(.+?)\s+has gone offline\.?$/i)[1].trim();
+                    const name = offline[1].trim();
                     const team = this.state.findPlayerTeam(name);
-                    const ps = team && this.state.playerStats[name];
+                    const ps = team && this.state.playerStats[this.state.resolveCanonicalPlayer(name)];
                     if (team && (!ps || !ps.eliminated)) this.markEliminated(name, team);
                 }
                 return true;
             }
             if (/^.+?\s+has come online\.?$/i.test(clean)) return true;
 
-            if (/game over!?/i.test(clean)) {
-                this.onGameOver(clean);
-            }
+            if (/game over!?/i.test(clean)) this.onGameOver(clean);
             return this.detect(clean, rawLine);
         }
 
         /**
          * Mode-specific detection; subclasses override.
+         * @param {string} clean Stripped chat line.
+         * @param {string} raw Raw chat line.
          * @returns {boolean} True when the line scored.
          */
-        detect(/* clean, raw */) {
+        detect(clean, raw) {
             return false;
         }
 
         /**
-         * Handle a Game OVER line by finalising the mode's placements.
+         * Handle a Game OVER line by finalising the mode's placements. PvP solo
+         * placements use enemy-relative survival; team placements still follow.
+         * @param {string} clean Stripped chat line.
          * @returns {void}
          */
-        onGameOver(/* clean */) {
+        onGameOver(clean) {
             this.state.currentGameCompleted = true;
-
-            // PvP solo placement scoring uses enemy-relative survival,
-            // not normal global player placements.
-            if (
-                this.features.pvp &&
-                this.points.enableSoloPlacements
-            ) {
+            if (this.features.pvp && this.points.enableSoloPlacements) {
                 this.engine.finalizePvpIndividualPlacements();
-            }
-            else if (this.features.individualSurvival) {
+            } else if (this.features.individualSurvival) {
                 this.engine.finalizePlayerPlacements();
             }
-
-            // PvP team placement scoring still happens separately.
-            if (this.features.teamElimination) {
-                this.engine.finalizeFromSurvival();
-            }
+            if (this.features.teamElimination) this.engine.finalizeFromSurvival();
         }
 
         /**
@@ -143,10 +147,8 @@
                 if (killer === victim) return this.recordDeath(victim);
                 return this.recordKill(killer, victim);
             }
-            if (players.length === 1) {
-                if (this.selfDeathPhrases.some(p => lower.includes(p))) {
-                    return this.recordDeath(players[0]);
-                }
+            if (players.length === 1 && this.selfDeathPhrases.some(p => lower.includes(p))) {
+                return this.recordDeath(players[0]);
             }
             return false;
         }
@@ -171,7 +173,7 @@
          * @returns {boolean} True when the line scored.
          */
         detectKilledBy(clean) {
-            const m = clean.match(/»?\s*You were killed by\s+(.+?)(?:\.\s*They had\s+[\d.]+\s+hearts?)?\s*$/i);
+            const m = clean.match(/\u00BB?\s*You were killed by\s+(.+?)(?:\.\s*They had\s+[\d.]+\s+hearts?)?\s*$/i);
             if (!m) return false;
             const killerName = m[1].trim().replace(/\.$/, '');
             if (!killerName) return false;
@@ -195,10 +197,21 @@
                 Array.isArray(score.events) && score.events.some(e => e.type === 'First Blood'));
             if (alreadyAwarded) return;
             const points = this.engine.awardPoints(teamName, 'First Blood');
-            const score = this.state.ensureScore(teamName);
-            const event = score.events[score.events.length - 1];
-            if (event && event.type === 'First Blood') event.player = playerName;
+            this.tagLastEvent(teamName, 'First Blood', playerName);
             this.state.addLog(`${playerName} got FIRST BLOOD!${points ? ` (+${points})` : ''}`, 'success');
+        }
+
+        /**
+         * Credit the player on a team's newest event when it has the given type.
+         * @param {string} teamName Team name.
+         * @param {string} eventType Expected event type.
+         * @param {string} playerName Player to credit.
+         * @returns {void}
+         */
+        tagLastEvent(teamName, eventType, playerName) {
+            const events = this.state.ensureScore(teamName).events;
+            const event = events[events.length - 1];
+            if (event && event.type === eventType) event.player = playerName;
         }
 
         /**
@@ -212,6 +225,33 @@
         }
 
         /**
+         * Credit a kill to the killer's team and stats.
+         * @param {string} canonicalKiller Canonical killer name.
+         * @param {string} killerTeam Killer's team.
+         * @param {string} canonicalVictim Canonical victim name, or '???'.
+         * @returns {void}
+         */
+        creditKill(canonicalKiller, killerTeam, canonicalVictim) {
+            this.state.getOrCreatePlayerStats(canonicalKiller, killerTeam).kills++;
+            this.engine.awardPoints(killerTeam, 'Kill');
+            this.state.ensureScore(killerTeam).kills.push({
+                player: canonicalKiller, victim: canonicalVictim, time: new Date().toISOString()
+            });
+            this.awardFirstBlood(canonicalKiller, killerTeam);
+        }
+
+        /**
+         * Count a death and eliminate the victim.
+         * @param {string} canonicalVictim Canonical victim name.
+         * @param {string} victimTeam Victim's team.
+         * @returns {void}
+         */
+        creditDeath(canonicalVictim, victimTeam) {
+            this.state.getOrCreatePlayerStats(canonicalVictim, victimTeam).deaths++;
+            this.markEliminated(canonicalVictim, victimTeam);
+        }
+
+        /**
          * Credit a kill with no known victim.
          * @param {string} killerName Killer name.
          * @returns {string|boolean} 'kill' or false.
@@ -220,13 +260,7 @@
             const killerTeam = this.resolvePlayerTeam(killerName);
             if (!killerTeam) return false;
             const canonical = this.state.resolveCanonicalPlayer(killerName);
-            const ks = this.state.getOrCreatePlayerStats(canonical, killerTeam);
-            ks.kills++;
-            this.engine.awardPoints(killerTeam, 'Kill');
-            this.state.ensureScore(killerTeam).kills.push({
-                player: canonical, victim: '?', time: new Date().toISOString()
-            });
-            this.awardFirstBlood(canonical, killerTeam);
+            this.creditKill(canonical, killerTeam, '???');
             this.state.addLog(`${this.subLabel(killerName, canonical)} got a kill`, 'success');
             return 'kill';
         }
@@ -242,20 +276,8 @@
             const victimTeam = this.resolvePlayerTeam(victimName);
             const canonicalKiller = this.state.resolveCanonicalPlayer(killerName);
             const canonicalVictim = this.state.resolveCanonicalPlayer(victimName);
-            if (killerTeam) {
-                const ks = this.state.getOrCreatePlayerStats(canonicalKiller, killerTeam);
-                ks.kills++;
-                this.engine.awardPoints(killerTeam, 'Kill');
-                this.state.ensureScore(killerTeam).kills.push({
-                    player: canonicalKiller, victim: canonicalVictim, time: new Date().toISOString()
-                });
-                this.awardFirstBlood(canonicalKiller, killerTeam);
-            }
-            if (victimTeam) {
-                const vs = this.state.getOrCreatePlayerStats(canonicalVictim, victimTeam);
-                vs.deaths++;
-                this.markEliminated(canonicalVictim, victimTeam);
-            }
+            if (killerTeam) this.creditKill(canonicalKiller, killerTeam, canonicalVictim);
+            if (victimTeam) this.creditDeath(canonicalVictim, victimTeam);
             this.state.addLog(`${this.subLabel(killerName, canonicalKiller)} eliminated ${this.subLabel(victimName, canonicalVictim)}`, 'success');
             return 'kill';
         }
@@ -269,9 +291,7 @@
             const team = this.resolvePlayerTeam(victimName);
             if (!team) return false;
             const canonical = this.state.resolveCanonicalPlayer(victimName);
-            const vs = this.state.getOrCreatePlayerStats(canonical, team);
-            vs.deaths++;
-            this.markEliminated(canonical, team);
+            this.creditDeath(canonical, team);
             this.state.addLog(`${this.subLabel(victimName, canonical)} was eliminated`, 'warning');
             return 'death';
         }
@@ -285,47 +305,49 @@
         markEliminated(playerName, teamName) {
             const canonical = this.state.resolveCanonicalPlayer(playerName);
             const ps = this.state.getOrCreatePlayerStats(canonical, teamName);
-            if (!ps.eliminated) {
-                ps.eliminated = true;
-                if (!this.state.playerEliminationOrder.includes(canonical)) {
-                    this.state.playerEliminationOrder.push(canonical);
-                }
+            if (ps.eliminated) return;
+            ps.eliminated = true;
+            if (!this.state.playerEliminationOrder.includes(canonical)) {
+                this.state.playerEliminationOrder.push(canonical);
             }
         }
 
         /**
+         * Number of eliminated players on a team.
+         * @param {string} teamName Team name.
+         * @returns {number} Eliminated count.
+         */
+        eliminatedCount(teamName) {
+            const team = this.state.teams[teamName];
+            if (!team) return 0;
+            return (team.players || []).filter(p => {
+                const ps = this.state.playerStats[p];
+                return ps && ps.eliminated;
+            }).length;
+        }
+
+        /**
          * Team elimination line; resolves by name first, then player data when the
-         * in-game color does not match an app team.
+         * in-game color does not match an app team. An already-eliminated team is
+         * either a color mismatch or a duplicate broadcast, so it is only reassigned
+         * to a team that is genuinely fully knocked out.
          * @param {string} clean Stripped chat line.
          * @returns {boolean} True when handled.
          */
         detectTeamElimination(clean) {
             const m = clean.match(/(.+?)\s+(?:Team\s+)?has been (?:ELIMINATED|eliminated)!?$/i);
             if (!m) return false;
-            const label = m[1].trim();
-            let teamName = this.resolveTeamFromLabel(label);
+            let teamName = this.resolveTeamFromLabel(m[1].trim());
 
             if (teamName) {
-                const matched = this.state.teams[teamName];
-                const matchedElim = matched ? (matched.players || []).filter(p => {
-                    const ps = this.state.playerStats[p];
-                    return ps && ps.eliminated;
-                }).length : 0;
                 const inferred = this.inferEliminatedTeam();
-                if (inferred && inferred !== teamName) {
-                    const inf = this.state.teams[inferred];
-                    const infElim = inf ? (inf.players || []).filter(p => {
-                        const ps = this.state.playerStats[p];
-                        return ps && ps.eliminated;
-                    }).length : 0;
-                    if (infElim > matchedElim) teamName = inferred;
+                if (inferred && inferred !== teamName && this.eliminatedCount(inferred) > this.eliminatedCount(teamName)) {
+                    teamName = inferred;
                 }
             } else {
                 teamName = this.inferEliminatedTeam();
             }
             if (!teamName) return false;
-            // Already-eliminated team: either a color mismatch or Hive's duplicate
-            // broadcast; only reassign to a team that is genuinely fully knocked out.
             if (this.state.eliminationOrder.includes(teamName)) {
                 const inferred = this.inferEliminatedTeam();
                 if (!inferred || !this.engine.isTeamFullyEliminated(inferred)) return true;
@@ -338,19 +360,20 @@
                 for (const p of team.players) this.markEliminated(p, teamName);
             }
             this.state.addLog(`${teamName} eliminated (${this.state.eliminationOrder.length} out)`, 'warning');
-            if (!this.features.individualSurvival) {
-                const features = this.features;
-
-                if (features.pvp && features.teamElimination) {
-                    // PvP placements are finalised at Game OVER so tied surviving teams
-                    // can share placement correctly.
-                    this.engine.tryFinalize();
-                } else {
-                    this.engine.recordTeamEliminationPlacement(teamName);
-                    this.engine.tryFinalize();
-                }
-            }
+            this.afterTeamEliminated(teamName);
             return true;
+        }
+
+        /**
+         * Record placement for a newly eliminated team. PvP placements wait for
+         * Game OVER so tied surviving teams can share a placement.
+         * @param {string} teamName Eliminated team.
+         * @returns {void}
+         */
+        afterTeamEliminated(teamName) {
+            if (this.features.individualSurvival || this.features.pvp) return;
+            this.engine.recordTeamEliminationPlacement(teamName);
+            this.engine.tryFinalize();
         }
 
         /**
@@ -358,23 +381,20 @@
          * @returns {string|null} Team name or null.
          */
         inferEliminatedTeam() {
-            const unresolved = Object.keys(this.state.teams)
-                .filter(t => !this.state.eliminationOrder.includes(t));
-            if (unresolved.length === 0) return null;
             let best = null, bestCount = -1;
-            for (const t of unresolved) {
-                const players = this.state.teams[t].players || [];
-                const count = players.filter(p => {
-                    const ps = this.state.playerStats[p];
-                    return ps && ps.eliminated;
-                }).length;
-                if (count > bestCount) { bestCount = count; best = t; }
+            for (const t of this.engine.getActiveTeams()) {
+                const count = this.eliminatedCount(t);
+                if (count > bestCount) {
+                    bestCount = count;
+                    best = t;
+                }
             }
             return best;
         }
 
         /**
          * Winner line; falls back to the last active team on a color mismatch.
+         * Solo PvP placements are left for Game OVER.
          * @param {string} clean Stripped chat line.
          * @returns {boolean} True when handled.
          */
@@ -390,12 +410,9 @@
             }
             if (!teamName) return false;
             this.state.addLog(`${teamName} WON!`, 'success');
-            if (this.features.individualSurvival) {
+            if (this.features.individualSurvival && !this.features.pvp) {
                 this.engine.finalizePlayerPlacements();
                 return true;
-            }
-            if (!this.engine.hasPlacement(teamName, '1st place')) {
-                this.engine.awardPoints(teamName, '1st place');
             }
             this.engine.finalizeGamePlacements(teamName);
             return true;
@@ -412,9 +429,7 @@
             const word = upper.replace(/\bTEAM\b/i, '').trim();
             if (this.state.teams[word]) return word;
             for (const teamName of Object.keys(this.state.teams)) {
-                if (word === teamName || word.startsWith(teamName + ' ') || word.endsWith(' ' + teamName)) {
-                    return teamName;
-                }
+                if (word.startsWith(teamName + ' ') || word.endsWith(' ' + teamName)) return teamName;
             }
             return null;
         }
@@ -443,8 +458,8 @@
          */
         placementRegexes() {
             return [
-                { pattern: /(?:»\s*)?(You|[A-Za-z0-9_ ]+?)\s+(?:has\s+)?finished in\s+(\d+)(?:st|nd|rd|th)\s+place/i, name: 1, pos: 2 },
-                { pattern: /(?:»\s*)?(\d+)(?:st|nd|rd|th)\s+Place:\s+([A-Za-z0-9_ ]+?)(?:\s|$|\[)/i, name: 2, pos: 1 }
+                { pattern: /(?:\u00BB\s*)?(You|[A-Za-z0-9_ ]+?)\s+(?:has\s+)?finished in\s+(\d+)(?:st|nd|rd|th)\s+place/i, name: 1, pos: 2 },
+                { pattern: /(?:\u00BB\s*)?(\d+)(?:st|nd|rd|th)\s+Place:\s+([A-Za-z0-9_ ]+?)(?:\s|$|\[)/i, name: 2, pos: 1 }
             ];
         }
 
@@ -464,8 +479,7 @@
             const key = this.engine.placementKey(position);
             if (key) {
                 const score = this.state.ensureScore(team);
-                const already = score.placements.some(p => p.player === canonical && p.position === position);
-                if (!already) {
+                if (!score.placements.some(p => p.player === canonical && p.position === position)) {
                     this.engine.awardPoints(team, key);
                     score.placements.push({ player: canonical, position, time: new Date().toISOString() });
                 }
@@ -485,27 +499,24 @@
          */
         trackTeamFinish(teamName, playerName) {
             if (!this.engine.isScorableTeam(teamName)) return;
-            if (!this.state.playersFinished[teamName]) this.state.playersFinished[teamName] = [];
-            if (!this.state.playersFinished[teamName].includes(playerName)) {
-                this.state.playersFinished[teamName].push(playerName);
-            }
+            const finished = this.state.playersFinished[teamName] = this.state.playersFinished[teamName] || [];
+            if (!finished.includes(playerName)) finished.push(playerName);
             const team = this.state.teams[teamName];
             if (!team || !team.players) return;
-            const allFinished = team.players.every(p => this.state.playersFinished[teamName].includes(p));
-            if (allFinished && !this.state.teamsFullyFinished.includes(teamName)) {
-                this.state.teamsFullyFinished.push(teamName);
-                const position = this.state.teamsFullyFinished.length;
-                if (position === 1) {
-                    this.engine.awardPoints(teamName, 'First full team finish');
-                    this.state.addLog(`${teamName} is the FIRST team to fully finish!`, 'success');
-                } else if (this.points.enableExtendedTeamBonuses && position === 2) {
-                    this.engine.awardPoints(teamName, 'Second full team finish');
-                    this.state.addLog(`${teamName} is the SECOND team to fully finish!`, 'success');
-                } else if (this.points.enableExtendedTeamBonuses && position === 3) {
-                    this.engine.awardPoints(teamName, 'Third full team finish');
-                    this.state.addLog(`${teamName} is the THIRD team to fully finish!`, 'success');
-                }
-            }
+            if (!team.players.every(p => finished.includes(p)) || this.state.teamsFullyFinished.includes(teamName)) return;
+
+            this.state.teamsFullyFinished.push(teamName);
+            const position = this.state.teamsFullyFinished.length;
+            if (position > 1 && !this.points.enableExtendedTeamBonuses) return;
+            const tiers = [
+                ['First full team finish', 'FIRST'],
+                ['Second full team finish', 'SECOND'],
+                ['Third full team finish', 'THIRD']
+            ];
+            const tier = tiers[position - 1];
+            if (!tier) return;
+            this.engine.awardPoints(teamName, tier[0]);
+            this.state.addLog(`${teamName} is the ${tier[1]} team to fully finish!`, 'success');
         }
 
         /**
@@ -516,15 +527,13 @@
         resolvePlayerName(raw) {
             if (!raw) return null;
             const name = raw.trim();
-            if (/^you$/i.test(name)) {
-                const ign = (this.points.myIgn || '').trim();
-                if (!ign) {
-                    this.state.addLog('Skipped a "You" event - set "My IGN" in Settings to score it', 'warning');
-                    return null;
-                }
-                return ign;
+            if (!/^you$/i.test(name)) return name;
+            const ign = (this.points.myIgn || '').trim();
+            if (!ign) {
+                this.state.addLog('Skipped a "You" event - set "My IGN" in Settings to score it', 'warning');
+                return null;
             }
-            return name;
+            return ign;
         }
     }
 
@@ -532,7 +541,5 @@
     global.Hive.parsers = global.Hive.parsers || {};
     global.Hive.parsers.GamemodeParser = GamemodeParser;
 
-    if (typeof module !== 'undefined' && module.exports) {
-        module.exports = GamemodeParser;
-    }
+    if (typeof module !== 'undefined' && module.exports) module.exports = GamemodeParser;
 })(typeof window !== 'undefined' ? window : globalThis);

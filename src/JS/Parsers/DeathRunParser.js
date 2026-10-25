@@ -6,7 +6,13 @@
     const Base = global.Hive.parsers.GamemodeParser;
 
     class DeathRunParser extends Base {
-        get name() { return 'DeathRun'; }
+        /**
+         * Gamemode name this parser handles.
+         * @returns {string} Gamemode name.
+         */
+        get name() {
+            return 'DeathRun';
+        }
 
         /**
          * DeathRun line detection.

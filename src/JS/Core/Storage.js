@@ -8,35 +8,37 @@
 
     const memory = {};
 
-    /**
-     * The desktop storage bridge when running under Electron.
-     * @returns {Object|null} Bridge or null.
-     */
-    function desktop() {
-        return (typeof global.hiveDesktop !== 'undefined' && global.hiveDesktop && global.hiveDesktop.storage) || null;
-    }
-
-    const Storage = {
+    class Storage {
         /**
-         * Read a stored value.
+         * The desktop storage bridge when running under Electron.
+         * @returns {Object|null} Bridge or null.
+         */
+        static desktop() {
+            return (global.hiveDesktop && global.hiveDesktop.storage) || null;
+        }
+
+        /**
+         * Read a stored value; a legacy localStorage value is moved to disk on first read.
          * @param {string} key Storage key.
          * @returns {string|null} Stored string or null.
          */
-        getItem(key) {
-            const d = desktop();
+        static getItem(key) {
+            const d = Storage.desktop();
             if (d) {
                 const v = d.getItem(key);
                 if (v !== null && v !== undefined) return v;
-                // Migrate any pre-desktop localStorage value to disk on first read.
                 if (typeof localStorage !== 'undefined') {
                     const legacy = localStorage.getItem(key);
-                    if (legacy !== null) { d.setItem(key, legacy); return legacy; }
+                    if (legacy !== null) {
+                        d.setItem(key, legacy);
+                        return legacy;
+                    }
                 }
                 return null;
             }
             if (typeof localStorage !== 'undefined') return localStorage.getItem(key);
             return Object.prototype.hasOwnProperty.call(memory, key) ? memory[key] : null;
-        },
+        }
 
         /**
          * Write a value.
@@ -44,25 +46,37 @@
          * @param {string} value Value to store.
          * @returns {void}
          */
-        setItem(key, value) {
-            const d = desktop();
-            if (d) { d.setItem(key, String(value)); return; }
-            if (typeof localStorage !== 'undefined') { localStorage.setItem(key, value); return; }
+        static setItem(key, value) {
+            const d = Storage.desktop();
+            if (d) {
+                d.setItem(key, String(value));
+                return;
+            }
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem(key, value);
+                return;
+            }
             memory[key] = String(value);
-        },
+        }
 
         /**
          * Remove a value.
          * @param {string} key Storage key.
          * @returns {void}
          */
-        removeItem(key) {
-            const d = desktop();
-            if (d) { d.removeItem(key); return; }
-            if (typeof localStorage !== 'undefined') { localStorage.removeItem(key); return; }
+        static removeItem(key) {
+            const d = Storage.desktop();
+            if (d) {
+                d.removeItem(key);
+                return;
+            }
+            if (typeof localStorage !== 'undefined') {
+                localStorage.removeItem(key);
+                return;
+            }
             delete memory[key];
         }
-    };
+    }
 
     global.Hive = global.Hive || {};
     global.Hive.Storage = Storage;

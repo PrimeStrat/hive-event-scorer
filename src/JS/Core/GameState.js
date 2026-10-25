@@ -21,9 +21,12 @@
         'UNKNOWN': { color: '#9CA3AF', colorCode: '7' }
     };
 
-    const clone = (v) => JSON.parse(JSON.stringify(v));
+    const MAX_UNDO = 50;
 
     class GameState {
+        /**
+         * Create an empty game state.
+         */
         constructor() {
             this.predefinedTeams = PREDEFINED_TEAMS;
 
@@ -47,6 +50,26 @@
             this.redoStack = [];
 
             this.onLog = null;
+        }
+
+        /**
+         * Deep-copy a JSON-safe value.
+         * @param {*} value Value to copy.
+         * @returns {*} The copy.
+         */
+        static clone(value) {
+            return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+        }
+
+        /**
+         * Push onto a stack, dropping the oldest entry past the undo limit.
+         * @param {Object[]} stack Undo or redo stack.
+         * @param {Object} snapshot Snapshot to push.
+         * @returns {void}
+         */
+        static pushCapped(stack, snapshot) {
+            stack.push(snapshot);
+            if (stack.length > MAX_UNDO) stack.shift();
         }
 
         /**
@@ -200,17 +223,17 @@
         captureSnapshot(action) {
             return {
                 action,
-                currentGame: clone(this.currentGame),
-                gameHistory: clone(this.gameHistory),
-                teams: clone(this.teams),
-                substitutions: clone(this.substitutions),
-                activityLog: clone(this.activityLog),
-                playerStats: clone(this.playerStats),
-                scores: clone(this.scores),
-                eliminationOrder: clone(this.eliminationOrder),
-                playerEliminationOrder: clone(this.playerEliminationOrder),
-                playersFinished: clone(this.playersFinished),
-                teamsFullyFinished: clone(this.teamsFullyFinished)
+                currentGame: GameState.clone(this.currentGame),
+                gameHistory: GameState.clone(this.gameHistory),
+                teams: GameState.clone(this.teams),
+                substitutions: GameState.clone(this.substitutions),
+                activityLog: GameState.clone(this.activityLog),
+                playerStats: GameState.clone(this.playerStats),
+                scores: GameState.clone(this.scores),
+                eliminationOrder: GameState.clone(this.eliminationOrder),
+                playerEliminationOrder: GameState.clone(this.playerEliminationOrder),
+                playersFinished: GameState.clone(this.playersFinished),
+                teamsFullyFinished: GameState.clone(this.teamsFullyFinished)
             };
         }
 
@@ -220,17 +243,17 @@
          * @returns {void}
          */
         restoreSnapshot(s) {
-            this.currentGame = clone(s.currentGame);
-            this.gameHistory = clone(s.gameHistory);
-            this.teams = clone(s.teams);
-            this.substitutions = clone(s.substitutions || {});
-            this.activityLog = clone(s.activityLog);
-            this.playerStats = clone(s.playerStats);
-            this.scores = clone(s.scores);
-            this.eliminationOrder = clone(s.eliminationOrder);
-            this.playerEliminationOrder = clone(s.playerEliminationOrder);
-            this.playersFinished = clone(s.playersFinished);
-            this.teamsFullyFinished = clone(s.teamsFullyFinished);
+            this.currentGame = GameState.clone(s.currentGame);
+            this.gameHistory = GameState.clone(s.gameHistory);
+            this.teams = GameState.clone(s.teams);
+            this.substitutions = GameState.clone(s.substitutions || {});
+            this.activityLog = GameState.clone(s.activityLog);
+            this.playerStats = GameState.clone(s.playerStats);
+            this.scores = GameState.clone(s.scores);
+            this.eliminationOrder = GameState.clone(s.eliminationOrder);
+            this.playerEliminationOrder = GameState.clone(s.playerEliminationOrder);
+            this.playersFinished = GameState.clone(s.playersFinished);
+            this.teamsFullyFinished = GameState.clone(s.teamsFullyFinished);
         }
 
         /**
@@ -239,7 +262,7 @@
          * @returns {void}
          */
         pushUndo(action) {
-            this.undoStack.push(this.captureSnapshot(action));
+            GameState.pushCapped(this.undoStack, this.captureSnapshot(action));
             this.redoStack = [];
         }
 
@@ -250,7 +273,7 @@
         undo() {
             if (this.undoStack.length === 0) return null;
             const state = this.undoStack.pop();
-            this.redoStack.push(this.captureSnapshot(state.action));
+            GameState.pushCapped(this.redoStack, this.captureSnapshot(state.action));
             this.restoreSnapshot(state);
             return state.action;
         }
@@ -262,7 +285,7 @@
         redo() {
             if (this.redoStack.length === 0) return null;
             const state = this.redoStack.pop();
-            this.undoStack.push(this.captureSnapshot(state.action));
+            GameState.pushCapped(this.undoStack, this.captureSnapshot(state.action));
             this.restoreSnapshot(state);
             return state.action;
         }
@@ -279,8 +302,8 @@
                 gamemode: this.currentGame.gamemode,
                 startTime: this.currentGame.startTime,
                 endTime: this.currentGame.endTime,
-                scores: clone(this.scores),
-                playerStats: clone(this.playerStats),
+                scores: GameState.clone(this.scores),
+                playerStats: GameState.clone(this.playerStats),
                 eliminationOrder: [...this.eliminationOrder],
                 playerEliminationOrder: [...this.playerEliminationOrder]
             };
@@ -317,10 +340,10 @@
         /**
          * Apply serialized data over the current state.
          * @param {Object} data Serialized data.
-         * @param {{includeTeams: boolean}} opts Whether to overwrite teams.
+         * @param {boolean} includeTeams Whether to overwrite teams.
          * @returns {void}
          */
-        applyData(data, { includeTeams = true } = {}) {
+        applyData(data, includeTeams = true) {
             if (!data) return;
             if (includeTeams && data.teams) this.teams = data.teams;
             if (data.substitutions && typeof data.substitutions === 'object' && !Array.isArray(data.substitutions)) {
@@ -334,8 +357,8 @@
             if (Array.isArray(data.gameHistory)) this.gameHistory = data.gameHistory;
             if (data.playersFinished) this.playersFinished = data.playersFinished;
             if (data.teamsFullyFinished) this.teamsFullyFinished = data.teamsFullyFinished;
-            this.undoStack = Array.isArray(data.undoStack) ? data.undoStack : [];
-            this.redoStack = Array.isArray(data.redoStack) ? data.redoStack : [];
+            this.undoStack = Array.isArray(data.undoStack) ? data.undoStack.slice(-MAX_UNDO) : [];
+            this.redoStack = Array.isArray(data.redoStack) ? data.redoStack.slice(-MAX_UNDO) : [];
             if (data.gamemode) this.gamemode = data.gamemode;
         }
 
@@ -359,7 +382,7 @@
             }
             try {
                 const eventData = store.getItem('hive_event_data');
-                if (eventData) this.applyData(JSON.parse(eventData), { includeTeams: false });
+                if (eventData) this.applyData(JSON.parse(eventData), false);
                 const history = store.getItem('hive_game_history');
                 if (history) {
                     const parsed = JSON.parse(history);

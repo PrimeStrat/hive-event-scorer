@@ -5,9 +5,16 @@
 (function (global) {
     'use strict';
     const Base = global.Hive.parsers.GamemodeParser;
+    const ChatUtils = global.Hive.ChatUtils;
 
     class SurvivalGamesParser extends Base {
-        get name() { return 'Survival Games'; }
+        /**
+         * Gamemode name this parser handles.
+         * @returns {string} Gamemode name.
+         */
+        get name() {
+            return 'Survival Games';
+        }
 
         /**
          * Survival Games line detection.
@@ -18,19 +25,23 @@
             if (this.detectDistrictElimination(clean)) return true;
             if (this.detectKilledBy(clean)) return true;
             if (this.detectGenericKill(clean)) return true;
-            // Lone registered player starting the line = kill on an unregistered victim.
-            if (!this.isLobbyLine(clean) && !/\bhas \d+(\.\d+)? hearts?\b/i.test(clean)) {
-                const { ChatUtils } = global.Hive;
-                const players = ChatUtils.findPlayersInText(clean, this.state.allPlayerNames());
-                if (players.length === 1 && !this.selfDeathPhrases.some(p => clean.toLowerCase().includes(p))) {
-                    const name = players[0];
-                    const stripped = clean.replace(/^»\s*/, '');
-                    if (stripped.startsWith(name) && this.state.findPlayerTeam(name)) {
-                        return this.recordKillPointOnly(name) !== false;
-                    }
-                }
-            }
-            return false;
+            return this.detectUnregisteredVictimKill(clean);
+        }
+
+        /**
+         * A lone registered player starting the line is a kill on an unregistered victim.
+         * @param {string} clean Stripped chat line.
+         * @returns {boolean} True when a kill was credited.
+         */
+        detectUnregisteredVictimKill(clean) {
+            if (this.isLobbyLine(clean) || /\bhas \d+(\.\d+)? hearts?\b/i.test(clean)) return false;
+            const players = ChatUtils.findPlayersInText(clean, this.state.allPlayerNames());
+            if (players.length !== 1) return false;
+            const lower = clean.toLowerCase();
+            if (this.selfDeathPhrases.some(p => lower.includes(p))) return false;
+            const name = players[0];
+            if (!clean.replace(/^\u00BB\s*/, '').startsWith(name) || !this.state.findPlayerTeam(name)) return false;
+            return this.recordKillPointOnly(name) !== false;
         }
 
         /**
@@ -51,23 +62,15 @@
         detectDistrictElimination(clean) {
             if (!/District\s+\d+\s+has been\s+ELIMINATED/i.test(clean)) return false;
 
-            let candidate = this.engine.getActiveTeams().find(teamName => {
-                const players = this.state.teams[teamName].players || [];
-                if (players.length === 0) return false;
-                return players.every(p => this.state.playerStats[p] && this.state.playerStats[p].eliminated);
-            });
-            if (!candidate) candidate = this.inferEliminatedTeam();
-
+            const candidate = this.engine.getActiveTeams().find(t => this.engine.isTeamFullyEliminated(t)) ||
+                this.inferEliminatedTeam();
             if (!candidate) {
                 this.state.addLog('District eliminated (unmapped to an app team)', 'warning');
                 return true;
             }
             this.state.eliminationOrder.push(candidate);
             this.state.addLog(`${candidate} eliminated (${this.state.eliminationOrder.length} out)`, 'warning');
-            if (!this.features.individualSurvival) {
-                this.engine.recordTeamEliminationPlacement(candidate);
-                this.engine.tryFinalize();
-            }
+            this.afterTeamEliminated(candidate);
             return true;
         }
     }

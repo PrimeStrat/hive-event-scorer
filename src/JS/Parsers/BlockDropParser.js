@@ -6,7 +6,13 @@
     const Base = global.Hive.parsers.SurvivalLastStandingParser;
 
     class BlockDropParser extends Base {
-        get name() { return 'BlockDrop'; }
+        /**
+         * Gamemode name this parser handles.
+         * @returns {string} Gamemode name.
+         */
+        get name() {
+            return 'BlockDrop';
+        }
     }
 
     global.Hive.parsers.BlockDrop = BlockDropParser;

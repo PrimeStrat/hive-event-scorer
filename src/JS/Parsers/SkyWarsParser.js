@@ -7,7 +7,13 @@
     const Base = global.Hive.parsers.GamemodeParser;
 
     class SkyWarsParser extends Base {
-        get name() { return 'SkyWars'; }
+        /**
+         * Gamemode name this parser handles.
+         * @returns {string} Gamemode name.
+         */
+        get name() {
+            return 'SkyWars';
+        }
 
         /**
          * SkyWars line detection, tracking the kill leader before noise filtering.
@@ -15,26 +21,21 @@
          * @returns {boolean} True when the line scored.
          */
         detect(clean) {
-            const leader = clean.match(/»?\s*(.+?)\s+is the new kill leader!?$/i);
+            const leader = clean.match(/\u00BB?\s*(.+?)\s+is the new kill leader!?$/i);
             if (leader) {
-                if (this.points.enableKillLeader) {
-                    this.state.skyWarsKillLeader = leader[1].trim();
-                }
+                if (this.points.enableKillLeader) this.state.skyWarsKillLeader = leader[1].trim();
                 return false;
             }
-            const chest = clean.match(/»?\s*The Mystery Chest was opened by\s+(.+?)\s*$/i);
-            if (chest) {
-                return this.recordChestOpen(chest[1].trim());
-            }
+            const chest = clean.match(/\u00BB?\s*The Mystery Chest was opened by\s+(.+?)\s*$/i);
+            if (chest) return this.recordChestOpen(chest[1].trim());
             if (this.isNoise(clean)) return false;
             if (this.detectWinner(clean)) {
                 this.awardKillLeader();
                 return true;
             }
-            if (this.detectTeamElimination(clean)) return true;
-            if (this.detectKilledBy(clean)) return true;
-            if (this.detectGenericKill(clean)) return true;
-            return false;
+            return this.detectTeamElimination(clean) ||
+                this.detectKilledBy(clean) ||
+                !!this.detectGenericKill(clean);
         }
 
         /**
@@ -62,9 +63,7 @@
             if (!this.engine.isScorableTeam(teamName)) return false;
             const canonical = this.state.resolveCanonicalPlayer(openerName);
             const pts = this.engine.awardPoints(teamName, 'Mystery Chest');
-            const score = this.state.ensureScore(teamName);
-            const event = score.events[score.events.length - 1];
-            if (event && event.type === 'Mystery Chest') event.player = canonical;
+            this.tagLastEvent(teamName, 'Mystery Chest', canonical);
             this.state.addLog(`${this.subLabel(openerName, canonical)} opened the Mystery Chest${pts ? ` (+${pts})` : ''}`, 'info');
             return true;
         }
@@ -76,15 +75,14 @@
          */
         awardKillLeader() {
             if (!this.points.enableKillLeader) return;
-            const playerName = this.state.skyWarsKillLeader;
-            if (!playerName) return;
-            const teamName = this.state.findPlayerTeam(playerName);
+            const announced = this.state.skyWarsKillLeader;
+            if (!announced) return;
+            const teamName = this.state.findPlayerTeam(announced);
             if (!this.engine.isScorableTeam(teamName)) return;
-            const score = this.state.ensureScore(teamName);
-            if (score.events.some(e => e.type === 'Kill Leader')) return;
+            if (this.state.ensureScore(teamName).events.some(e => e.type === 'Kill Leader')) return;
+            const playerName = this.state.resolveCanonicalPlayer(announced);
             this.engine.awardPoints(teamName, 'Kill Leader');
-            const last = score.events[score.events.length - 1];
-            if (last && last.type === 'Kill Leader') last.player = playerName;
+            this.tagLastEvent(teamName, 'Kill Leader', playerName);
             this.state.addLog(`${playerName} finished as the kill leader`, 'success');
         }
 

@@ -4,6 +4,8 @@
 (function (global) {
     'use strict';
 
+    const ChatUtils = global.Hive.ChatUtils;
+
     const ALIASES = {
         sg: 'Survival Games',
         survival: 'Survival Games',
@@ -21,18 +23,29 @@
         bp: 'Block Party'
     };
 
-    const FileImport = {
+    class FileImport {
         /**
          * Reduce a filename to its letters for matching.
          * @param {string} filename File name.
          * @returns {string} Lowercased letters only.
          */
-        normalize(filename) {
+        static normalize(filename) {
             return String(filename)
                 .replace(/\.[^.]+$/, '')
                 .toLowerCase()
                 .replace(/[^a-z]+/g, '');
-        },
+        }
+
+        /**
+         * Configured gamemode matching a canonical alias target.
+         * @param {string} canonical Canonical gamemode name.
+         * @param {string[]} knownGamemodes Configured gamemode names.
+         * @returns {string|null} Configured name or null.
+         */
+        static findKnown(canonical, knownGamemodes) {
+            const norm = ChatUtils.normalizeMode(canonical);
+            return knownGamemodes.find(g => ChatUtils.normalizeMode(g) === norm) || null;
+        }
 
         /**
          * Best-effort gamemode match for a filename.
@@ -40,42 +53,37 @@
          * @param {string[]} knownGamemodes Configured gamemode names.
          * @returns {string|null} Canonical gamemode name or null.
          */
-        inferGamemode(filename, knownGamemodes) {
-            const norm = this.normalize(filename);
+        static inferGamemode(filename, knownGamemodes) {
+            const norm = FileImport.normalize(filename);
             if (!norm) return null;
 
-            for (const g of knownGamemodes) {
-                if (g.replace(/\s+/g, '').toLowerCase() === norm) return g;
-            }
+            const exact = FileImport.findKnown(norm, knownGamemodes);
+            if (exact) return exact;
             if (ALIASES[norm]) {
-                const canonical = ALIASES[norm];
-                const match = knownGamemodes.find(g =>
-                    g.replace(/\s+/g, '').toLowerCase() === canonical.replace(/\s+/g, '').toLowerCase());
+                const match = FileImport.findKnown(ALIASES[norm], knownGamemodes);
                 if (match) return match;
             }
             for (const g of knownGamemodes) {
-                const gn = g.replace(/\s+/g, '').toLowerCase();
+                const gn = ChatUtils.normalizeMode(g);
                 if (norm.includes(gn) || gn.includes(norm)) return g;
             }
             for (const [alias, canonical] of Object.entries(ALIASES)) {
-                if (norm.includes(alias)) {
-                    const match = knownGamemodes.find(g =>
-                        g.replace(/\s+/g, '').toLowerCase() === canonical.replace(/\s+/g, '').toLowerCase());
-                    if (match) return match;
-                }
+                if (!norm.includes(alias)) continue;
+                const match = FileImport.findKnown(canonical, knownGamemodes);
+                if (match) return match;
             }
             return null;
-        },
+        }
 
         /**
          * True for a plain-text log file.
          * @param {File} file Dropped file.
          * @returns {boolean} Whether it is a .txt/plain file.
          */
-        isTextFile(file) {
+        static isTextFile(file) {
             return /\.txt$/i.test(file.name) || file.type === 'text/plain';
         }
-    };
+    }
 
     FileImport.ALIASES = ALIASES;
 

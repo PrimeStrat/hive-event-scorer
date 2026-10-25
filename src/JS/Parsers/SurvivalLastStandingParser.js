@@ -18,16 +18,11 @@
             if (this.isNoise(clean) || this.isLobbyLine(clean)) return false;
 
             const players = ChatUtils.findPlayersInText(clean, this.state.allPlayerNames());
-
             if (players.length === 0 && /you died/i.test(clean)) {
                 const me = this.resolvePlayerName('You');
-                if (me) return this.recordDeath(me) !== false;
-                return false;
+                return me ? this.recordDeath(me) !== false : false;
             }
-
-            if (players.length === 1) {
-                return this.recordDeath(players[0]) !== false;
-            }
+            if (players.length === 1) return this.recordDeath(players[0]) !== false;
             return false;
         }
 
@@ -46,13 +41,12 @@
         }
 
         /**
-         * Finalise placements from elimination order.
+         * Finalise placements from elimination order (done by the base class).
          * @param {string} clean Stripped chat line.
          * @returns {void}
          */
         onGameOver(clean) {
             super.onGameOver(clean);
-            this.engine.finalizePlayerPlacements();
             this.state.addLog(`${this.name} game over - placements finalised`, 'info');
         }
     }

@@ -6,7 +6,13 @@
     const Base = global.Hive.parsers.GamemodeParser;
 
     class GravityParser extends Base {
-        get name() { return 'Gravity'; }
+        /**
+         * Gamemode name this parser handles.
+         * @returns {string} Gamemode name.
+         */
+        get name() {
+            return 'Gravity';
+        }
 
         /**
          * Gravity line detection.
@@ -23,7 +29,7 @@
          */
         placementRegexes() {
             return [
-                { pattern: /(?:»\s*)?(You|[A-Za-z0-9_ ]+?)\s+finished all maps and came in\s+(\d+)(?:st|nd|rd|th)\s+place/i, name: 1, pos: 2 },
+                { pattern: /(?:\u00BB\s*)?(You|[A-Za-z0-9_ ]+?)\s+finished all maps and came in\s+(\d+)(?:st|nd|rd|th)\s+place/i, name: 1, pos: 2 },
                 ...super.placementRegexes()
             ];
         }

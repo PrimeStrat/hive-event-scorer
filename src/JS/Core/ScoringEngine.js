@@ -5,15 +5,47 @@
 (function (global) {
     'use strict';
 
+    const ChatUtils = global.Hive.ChatUtils;
+
     const MAX_PLACEMENTS = 50;
     const PLACEMENT_KEYS = {};
     for (let i = 1; i <= MAX_PLACEMENTS; i++) {
-        PLACEMENT_KEYS[i] = global.Hive.ChatUtils.ordinal(i) + ' place';
+        PLACEMENT_KEYS[i] = ChatUtils.ordinal(i) + ' place';
     }
     const UNKNOWN_TEAM = 'UNKNOWN';
+    const PLACEMENT_RE = /^\d+(?:st|nd|rd|th) place$/;
+    const PLAYER_BONUS_TYPES = ['Kill Leader', 'First Blood', 'Mystery Chest'];
+    const STANDING_BONUSES = ['Last team standing', 'Second last team standing', 'Third last team standing'];
+    const FINISH_BONUSES = ['First full team finish', 'Second full team finish', 'Third full team finish'];
+
+    /**
+     * @typedef {Object} ScoreEvent
+     * @property {string} type Point-table key.
+     * @property {number} points Points awarded.
+     * @property {string} time ISO timestamp.
+     * @property {string} [player] Player credited for player bonuses.
+     */
+
+    /**
+     * @typedef {Object} PlacementRecord
+     * @property {string} player Canonical player name.
+     * @property {number} position 1-based position.
+     * @property {string} time ISO timestamp.
+     * @property {string} [type] 'pvp-individual' for solo PvP placements.
+     */
+
+    /**
+     * @typedef {Object} TeamScore
+     * @property {number} score Team total.
+     * @property {PlacementRecord[]} placements Individual placements.
+     * @property {Array<{player: string, victim: string, time: string}>} kills Kill records.
+     * @property {Array<{player: string, time: string}>} bedBreaks Bed break records.
+     * @property {ScoreEvent[]} events Every point award.
+     */
 
     class ScoringEngine {
         /**
+         * Create an engine over shared state and point tables.
          * @param {GameState} state Shared game state.
          * @param {PointSystem} pointSystem Point tables and toggles.
          */
@@ -39,12 +71,7 @@
          * @returns {GamemodeParser|null} Parser or null.
          */
         parserFor(gamemode) {
-            if (this.parsers[gamemode]) return this.parsers[gamemode];
-            const norm = String(gamemode || '').replace(/\s+/g, '').toLowerCase();
-            for (const [name, parser] of Object.entries(this.parsers)) {
-                if (name.replace(/\s+/g, '').toLowerCase() === norm) return parser;
-            }
-            return null;
+            return ChatUtils.lookupMode(this.parsers, gamemode);
         }
 
         /**
@@ -153,7 +180,7 @@
             }
             const team = this.state.teams[teamName];
             if (team && team.players) {
-                const ord = global.Hive.ChatUtils.ordinal(position);
+                const ord = ChatUtils.ordinal(position);
                 for (const p of team.players) {
                     const ps = this.state.getOrCreatePlayerStats(p, teamName);
                     if (!ps.placement) ps.placement = ord;
@@ -173,118 +200,62 @@
         }
 
         /**
-         * Finalise the game when only one active team remains.
+         * Finalise the game when only one active team remains; PvP waits for Game OVER.
          * @returns {void}
          */
         tryFinalize() {
             const active = this.getActiveTeams();
-
             if (active.length !== 1) return;
-
-            const features =
-                this.points.featuresFor(this.state.gamemode) || {};
-
-            if (features.pvp && features.teamElimination) {
-                // For PvP, wait for the winner/Game OVER line.
-                return;
-            }
-
+            const features = this.points.featuresFor(this.state.gamemode) || {};
+            if (features.pvp && features.teamElimination) return;
             this.finalizeGamePlacements(active[0]);
         }
 
         /**
          * Close out a team-elimination game from survival state on Game OVER.
+         * PvP games can end with several teams alive, which counts as a tie.
          * @returns {void}
          */
         finalizeFromSurvival() {
             const active = this.getActiveTeams();
-
             if (active.length === 0) return;
-
             if (active.length === 1) {
                 this.finalizeGamePlacements(active[0]);
                 return;
             }
 
-            const features =
-                this.points.featuresFor(this.state.gamemode) || {};
-
-            // PvP team-placement modes can legitimately end with
-            // multiple surviving teams, so treat them as a tie.
-            if (
-                features.pvp &&
-                features.teamElimination &&
-                active.length > 1
-            ) {
+            const features = this.points.featuresFor(this.state.gamemode) || {};
+            if (features.pvp && features.teamElimination) {
                 this.finalizePvpTeamTie(active);
                 return;
             }
 
-            // Existing fallback for other team-elimination modes.
             const winner = active.slice().sort((a, b) =>
-                this.aliveCount(b) - this.aliveCount(a) ||
-                a.localeCompare(b)
-            )[0];
-
+                this.aliveCount(b) - this.aliveCount(a) || a.localeCompare(b))[0];
             this.finalizeGamePlacements(winner);
         }
 
+        /**
+         * Give every surviving PvP team the same placement and rank eliminated teams
+         * below them. shared-first with 3 survivors gives 1st, 1st, 1st, 2nd...;
+         * shared-placement gives 3rd, 3rd, 3rd, 4th...
+         * @param {string[]} activeTeams Teams still alive.
+         * @returns {void}
+         */
         finalizePvpTeamTie(activeTeams) {
-            const tiedTeams = activeTeams.filter(team =>
-                this.isScorableTeam(team)
-            );
-
+            const tiedTeams = activeTeams.filter(team => this.isScorableTeam(team));
             if (tiedTeams.length === 0) return;
 
-            const tieMode =
-                this.points.pvpTeamTieMode || 'shared-first';
-
+            const sharedFirst = (this.points.pvpTeamTieMode || 'shared-first') === 'shared-first';
             const tiedCount = tiedTeams.length;
+            const tiedPosition = sharedFirst ? 1 : tiedCount;
+            for (const teamName of tiedTeams) this.recordTeamPlacement(teamName, tiedPosition);
 
-            const tiedPosition =
-                tieMode === 'shared-placement'
-                    ? tiedCount
-                    : 1;
-
-            // Give all surviving teams the same placement.
-            for (const teamName of tiedTeams) {
-                this.recordTeamPlacement(
-                    teamName,
-                    tiedPosition
-                );
+            const order = this.state.eliminationOrder;
+            for (let i = 0; i < order.length; i++) {
+                const outlasted = order.length - i;
+                this.recordTeamPlacement(order[i], sharedFirst ? outlasted + 1 : tiedCount + outlasted);
             }
-
-            // Reassign eliminated teams based on the tie style.
-            //
-            // shared-first with 3 survivors:
-            // 1st, 1st, 1st, then 2nd, 3rd...
-            //
-            // shared-placement with 3 survivors:
-            // 3rd, 3rd, 3rd, then 4th, 5th...
-            const eliminatedCount =
-                this.state.eliminationOrder.length;
-
-            for (let i = 0; i < eliminatedCount; i++) {
-                const teamName =
-                    this.state.eliminationOrder[i];
-
-                let position;
-
-                if (tieMode === 'shared-first') {
-                    position =
-                        eliminatedCount - i + 1;
-                } else {
-                    position =
-                        tiedCount +
-                        (eliminatedCount - i);
-                }
-
-                this.recordTeamPlacement(
-                    teamName,
-                    position
-                );
-            }
-
             this.state.currentGameCompleted = true;
         }
 
@@ -318,62 +289,71 @@
          */
         recordPlayerPlacement(teamName, playerName, position) {
             const ps = this.state.getOrCreatePlayerStats(playerName, teamName);
-            ps.placement = global.Hive.ChatUtils.ordinal(position);
+            ps.placement = ChatUtils.ordinal(position);
             const key = this.placementKey(position);
             if (!key) return;
             const score = this.state.ensureScore(teamName);
-            const already = score.placements.some(p => p.player === playerName);
-            if (!already) {
+            if (!score.placements.some(p => p.player === playerName)) {
                 this.awardPoints(teamName, key);
                 score.placements.push({ player: playerName, position, time: new Date().toISOString() });
             }
         }
 
         /**
+         * Scorable canonical player names across every roster.
+         * @returns {string[]} Player names.
+         */
+        scorablePlayers() {
+            const names = this.state.allPlayerNames().map(n => this.state.resolveCanonicalPlayer(n));
+            return [...new Set(names)].filter(n => this.isScorablePlayer(n));
+        }
+
+        /**
+         * Award ranked team bonuses; 2nd/3rd tiers need the extended toggle.
+         * @param {string[]} ranking Team names, best first.
+         * @param {string[]} bonusEvents Bonus keys for 1st, 2nd and 3rd.
+         * @returns {void}
+         */
+        awardTeamBonuses(ranking, bonusEvents) {
+            const tiers = this.points.enableExtendedTeamBonuses ? 3 : 1;
+            for (let i = 0; i < Math.min(tiers, ranking.length); i++) {
+                if (!this.hasPlacement(ranking[i], bonusEvents[i])) {
+                    this.awardPoints(ranking[i], bonusEvents[i]);
+                }
+            }
+        }
+
+        /**
          * Rank every player from elimination order (survivors on top) and award
-         * last-standing team bonuses; 2nd/3rd tiers need the extended toggle.
-         * Block Party ties among survivors follow blockPartyTieMode.
+         * last-standing team bonuses. Block Party ties among survivors follow
+         * blockPartyTieMode; shared-first pushes eliminated players down one slot.
          * @returns {void}
          */
         finalizePlayerPlacements() {
-            const players = [...new Set(this.state.allPlayerNames().map(n => this.state.resolveCanonicalPlayer(n)))]
-                .filter(n => this.isScorablePlayer(n));
+            const players = this.scorablePlayers();
             const totalPlayers = players.length;
             if (totalPlayers === 0) return;
 
-            const assigned = new Set();
             const finalPositions = [];
             const order = this.state.playerEliminationOrder.filter(n => this.isScorablePlayer(n));
             const survivors = players.filter(n => !order.includes(n)).sort((a, b) => a.localeCompare(b));
             const isBlockPartyTie = this.state.gamemode === 'Block Party' && survivors.length > 1;
             const tieMode = this.points.blockPartyTieMode || 'shared-first';
-
-            for (let i = 0; i < order.length; i++) {
-                const name = order[i];
+            const place = (name, pos) => {
                 const team = this.state.findPlayerTeam(name);
-                // shared-first ties occupy 1st, pushing eliminated players down one slot.
-                const pos = (isBlockPartyTie && tieMode === 'shared-first')
-                    ? order.length - i + 1
-                    : totalPlayers - i;
                 this.recordPlayerPlacement(team, name, pos);
                 finalPositions.push({ team, position: pos });
-                assigned.add(name);
-            }
+            };
+
+            order.forEach((name, i) => {
+                place(name, (isBlockPartyTie && tieMode === 'shared-first') ? order.length - i + 1 : totalPlayers - i);
+            });
 
             if (isBlockPartyTie) {
                 const tiedPosition = tieMode === 'shared-placement' ? survivors.length : 1;
-                for (const name of survivors) {
-                    const team = this.state.findPlayerTeam(name);
-                    this.recordPlayerPlacement(team, name, tiedPosition);
-                    finalPositions.push({ team, position: tiedPosition });
-                }
+                survivors.forEach(name => place(name, tiedPosition));
             } else {
-                for (let i = 0; i < survivors.length; i++) {
-                    const team = this.state.findPlayerTeam(survivors[i]);
-                    const pos = survivors.length - i;
-                    this.recordPlayerPlacement(team, survivors[i], pos);
-                    finalPositions.push({ team, position: pos });
-                }
+                survivors.forEach((name, i) => place(name, survivors.length - i));
             }
 
             const bestByTeam = {};
@@ -384,28 +364,88 @@
                 }
             }
             const ranking = Object.entries(bestByTeam).sort((a, b) => a[1] - b[1]).map(([t]) => t);
-            const bonusEvents = ['Last team standing', 'Second last team standing', 'Third last team standing'];
-            const tiers = this.points.enableExtendedTeamBonuses ? 3 : 1;
-            for (let i = 0; i < Math.min(tiers, ranking.length); i++) {
-                if (!this.hasPlacement(ranking[i], bonusEvents[i])) {
-                    this.awardPoints(ranking[i], bonusEvents[i]);
-                }
-            }
+            this.awardTeamBonuses(ranking, STANDING_BONUSES);
             this.state.currentGameCompleted = true;
         }
 
         /**
+         * Rank PvP players by enemies outlived; survivors share one placement.
+         * @returns {void}
+         */
+        finalizePvpIndividualPlacements() {
+            const players = this.scorablePlayers();
+            if (players.length === 0) return;
+
+            const eliminationIndex = {};
+            this.state.playerEliminationOrder.forEach((name, index) => {
+                const canonical = this.state.resolveCanonicalPlayer(name);
+                if (eliminationIndex[canonical] === undefined) eliminationIndex[canonical] = index;
+            });
+
+            const survivingTeams = new Set();
+            for (const playerName of players) {
+                if (eliminationIndex[playerName] !== undefined) continue;
+                survivingTeams.add(this.state.findPlayerTeam(playerName));
+            }
+
+            const sharedFirst = (this.points.pvpTeamTieMode || 'shared-first') === 'shared-first';
+            for (const playerName of players) {
+                const playerTeam = this.state.findPlayerTeam(playerName);
+                const ownIndex = eliminationIndex[playerName];
+                let finalPosition;
+                if (ownIndex === undefined) {
+                    finalPosition = sharedFirst ? 1 : survivingTeams.size;
+                } else {
+                    const enemies = players.filter(other => this.state.findPlayerTeam(other) !== playerTeam);
+                    const outlived = enemies.filter(e => eliminationIndex[e] !== undefined && eliminationIndex[e] < ownIndex).length;
+                    finalPosition = Math.max(1, enemies.length - outlived);
+                }
+                this.recordPvpIndividualPlacement(playerTeam, playerName, finalPosition);
+            }
+        }
+
+        /**
+         * Record a solo PvP placement once and award its "Indiv" points.
+         * @param {string} teamName Player's team.
+         * @param {string} playerName Player name.
+         * @param {number} position 1-based position.
+         * @returns {void}
+         */
+        recordPvpIndividualPlacement(teamName, playerName, position) {
+            const canonical = this.state.resolveCanonicalPlayer(playerName);
+            const ps = this.state.getOrCreatePlayerStats(canonical, teamName);
+            ps.placement = ChatUtils.ordinal(position);
+
+            const normalKey = this.placementKey(position);
+            if (!normalKey) return;
+            const score = this.state.ensureScore(teamName);
+            if (score.placements.some(p => p.player === canonical && p.type === 'pvp-individual')) return;
+
+            this.awardPoints(teamName, `Indiv ${normalKey}`);
+            score.placements.push({ player: canonical, position, type: 'pvp-individual', time: new Date().toISOString() });
+        }
+
+        /**
          * Rebuild the current game's team scores from player-tagged records after
-         * a roster change, so points follow players to their new team.
+         * a roster change, so points follow players to their new team. Player
+         * bonuses move with their player and team placements stay with their team.
+         * Placements are only re-derived when the game had already been finalised.
          * @returns {void}
          */
         recomputeScores() {
             const features = this.points.featuresFor(this.state.gamemode) || {};
-            const kills = [], beds = [], finishPlacements = [];
-            for (const s of Object.values(this.state.scores)) {
+            const kills = [], beds = [], finishPlacements = [], carried = [];
+            for (const [teamName, s] of Object.entries(this.state.scores)) {
                 if (Array.isArray(s.kills)) kills.push(...s.kills);
                 if (Array.isArray(s.bedBreaks)) beds.push(...s.bedBreaks);
                 if (Array.isArray(s.placements)) finishPlacements.push(...s.placements);
+                for (const e of s.events || []) {
+                    if (e.player && PLAYER_BONUS_TYPES.includes(e.type)) {
+                        carried.push({ team: this.state.findPlayerTeam(e.player), event: e });
+                    } else if (!e.player && features.teamElimination && PLACEMENT_RE.test(e.type)) {
+                        carried.push({ team: teamName, event: e });
+                    }
+                }
             }
             this.state.scores = {};
             for (const t of Object.keys(this.state.teams)) this.state.ensureScore(t);
@@ -422,9 +462,17 @@
                 this.state.ensureScore(t).bedBreaks.push(b);
                 this.awardPoints(t, 'Bed Break');
             }
+            for (const c of carried) {
+                if (!this.isScorableTeam(c.team) || !this.state.teams[c.team]) continue;
+                const s = this.state.ensureScore(c.team);
+                s.score += Number(c.event.points) || 0;
+                s.events.push(c.event);
+            }
 
-            if (features.individualSurvival) {
-                this.finalizePlayerPlacements();
+            if (features.pvp && features.individualSurvival) {
+                if (finishPlacements.some(p => p.type === 'pvp-individual')) this.finalizePvpIndividualPlacements();
+            } else if (features.individualSurvival) {
+                if (finishPlacements.length > 0) this.finalizePlayerPlacements();
             } else if (features.individualFinish) {
                 for (const p of finishPlacements) {
                     const t = this.state.findPlayerTeam(p.player);
@@ -438,9 +486,8 @@
         }
 
         /**
-         * Re-derive team-finish bonuses from finish positions; 2nd/3rd tiers need
-         * the extended toggle.
-         * @param {Array<{player: string, position: number}>} finishPlacements Player finish records.
+         * Re-derive team-finish bonuses from finish positions.
+         * @param {PlacementRecord[]} finishPlacements Player finish records.
          * @returns {void}
          */
         recomputeTeamFinishes(finishPlacements) {
@@ -454,236 +501,52 @@
                 completed.push({ teamName, rank: Math.max(...members.map(m => posOf[m])) });
             }
             completed.sort((a, b) => a.rank - b.rank || a.teamName.localeCompare(b.teamName));
-            const bonusEvents = ['First full team finish', 'Second full team finish', 'Third full team finish'];
-            const tiers = this.points.enableExtendedTeamBonuses ? 3 : 1;
-            for (let i = 0; i < Math.min(tiers, completed.length); i++) {
-                this.awardPoints(completed[i].teamName, bonusEvents[i]);
-            }
+            this.awardTeamBonuses(completed.map(c => c.teamName), FINISH_BONUSES);
+        }
+
+        /**
+         * Points for the table key of one placement record, or 0.
+         * @param {Object<string, number>} table Point table.
+         * @param {string|null} key Point-table key.
+         * @returns {number} Points.
+         */
+        static pointsFor(table, key) {
+            return key && table[key] !== undefined ? Number(table[key]) : 0;
         }
 
         /**
          * A player's point contribution within a team score record.
-         * @param {Object} teamScore Team score bucket.
+         * @param {TeamScore} teamScore Team score bucket.
          * @param {string} playerName Player name.
          * @param {Object} playerData Player stats record.
-         * @param {Object} pointSystemTable Point table for the gamemode.
+         * @param {Object<string, number>} pointSystemTable Point table for the gamemode.
+         * @param {GamemodeFeatures} features Feature flags for the gamemode.
          * @returns {number} Contributed points.
          */
         playerContribution(teamScore, playerName, playerData, pointSystemTable, features) {
             if (!teamScore) return 0;
             const table = pointSystemTable || {};
-            const killPts = Number(table['Kill'] || 0);
-            const bedPts = Number(table['Bed Break'] || 0);
-            let total = 0;
-
-            if (Array.isArray(teamScore.kills)) {
-                total += teamScore.kills.filter(e => e.player === playerName).length * killPts;
-            }
-            if (Array.isArray(teamScore.bedBreaks)) {
-                total += teamScore.bedBreaks.filter(e => e.player === playerName).length * bedPts;
-            }
-            if (Array.isArray(teamScore.events)) {
-                for (const eventType of ['Kill Leader', 'First Blood', 'Mystery Chest']) {
-                    const pts = Number(table[eventType] || 0);
-                    if (!pts) continue;
-                    total += teamScore.events.filter(e => e.type === eventType && e.player === playerName).length * pts;
-                }
+            const mine = list => Array.isArray(list) ? list.filter(e => e.player === playerName) : [];
+            let total = mine(teamScore.kills).length * Number(table['Kill'] || 0);
+            total += mine(teamScore.bedBreaks).length * Number(table['Bed Break'] || 0);
+            for (const eventType of PLAYER_BONUS_TYPES) {
+                const pts = Number(table[eventType] || 0);
+                if (pts) total += mine(teamScore.events).filter(e => e.type === eventType).length * pts;
             }
 
-            if (features && (features.individualFinish || features.individualSurvival)) {
-                let hasPlacementRecord = false;
+            if (!features || !(features.individualFinish || features.individualSurvival)) return total;
 
-                if (Array.isArray(teamScore.placements)) {
-                    for (const pl of teamScore.placements) {
-                        if (pl.player !== playerName) continue;
-
-                        hasPlacementRecord = true;
-
-                        let key =
-                            this.placementKey(Number(pl.position));
-
-                        if (
-                            features?.pvp &&
-                            pl.type === 'pvp-individual'
-                        ) {
-                            key = `Indiv ${key}`;
-                        }
-
-                        if (
-                            key &&
-                            table[key] !== undefined
-                        ) {
-                            total += Number(table[key]);
-                        }
-                    }
-                }
-
-                if (
-                    !features?.pvp &&
-                    !hasPlacementRecord &&
-                    playerData &&
-                    playerData.placement
-                ) {
-                    const m =
-                        String(playerData.placement).match(/\d+/);
-
-                    if (m) {
-                        const key =
-                            this.placementKey(Number(m[0]));
-
-                        if (
-                            key &&
-                            table[key] !== undefined
-                        ) {
-                            total += Number(table[key]);
-                        }
-                    }
-                }
+            const placements = mine(teamScore.placements);
+            for (const pl of placements) {
+                let key = this.placementKey(Number(pl.position));
+                if (key && features.pvp && pl.type === 'pvp-individual') key = `Indiv ${key}`;
+                total += ScoringEngine.pointsFor(table, key);
+            }
+            if (!features.pvp && placements.length === 0 && playerData && playerData.placement) {
+                const m = String(playerData.placement).match(/\d+/);
+                if (m) total += ScoringEngine.pointsFor(table, this.placementKey(Number(m[0])));
             }
             return total;
-        }
-
-        finalizePvpIndividualPlacements() {
-            const players = [...new Set(
-                this.state.allPlayerNames()
-                    .map(name => this.state.resolveCanonicalPlayer(name))
-            )].filter(name => this.isScorablePlayer(name));
-
-            if (players.length === 0) return;
-
-            const eliminationIndex = {};
-
-            this.state.playerEliminationOrder.forEach((name, index) => {
-                const canonical =
-                    this.state.resolveCanonicalPlayer(name);
-
-                if (eliminationIndex[canonical] === undefined) {
-                    eliminationIndex[canonical] = index;
-                }
-            });
-
-            // Find every team that still has at least one surviving player.
-            const survivingTeams = new Set();
-
-            for (const playerName of players) {
-                if (eliminationIndex[playerName] !== undefined) continue;
-
-                const team =
-                    this.state.findPlayerTeam(playerName);
-
-                if (this.isScorableTeam(team)) {
-                    survivingTeams.add(team);
-                }
-            }
-
-            const tieMode =
-                this.points.pvpTeamTieMode || 'shared-first';
-
-            for (const playerName of players) {
-                const playerTeam =
-                    this.state.findPlayerTeam(playerName);
-
-                if (!this.isScorableTeam(playerTeam)) continue;
-
-                const playerWasEliminated =
-                    eliminationIndex[playerName] !== undefined;
-
-                let finalPosition;
-
-                // ---------------- surviving players ----------------
-
-                if (!playerWasEliminated) {
-                    // Every player surviving on one of the tied teams
-                    // receives the same placement.
-                    finalPosition =
-                        tieMode === 'shared-placement'
-                            ? survivingTeams.size
-                            : 1;
-                }
-
-                // ---------------- eliminated players ----------------
-
-                else {
-                    const enemies = players.filter(other =>
-                        other !== playerName &&
-                        this.state.findPlayerTeam(other) !== playerTeam
-                    );
-
-                    let enemiesOutlived = 0;
-
-                    const playerEliminationIndex =
-                        eliminationIndex[playerName];
-
-                    for (const enemy of enemies) {
-                        const enemyWasEliminated =
-                            eliminationIndex[enemy] !== undefined;
-
-                        if (
-                            enemyWasEliminated &&
-                            eliminationIndex[enemy] < playerEliminationIndex
-                        ) {
-                            enemiesOutlived++;
-                        }
-                    }
-
-                    finalPosition =
-                        Math.max(
-                            1,
-                            enemies.length - enemiesOutlived
-                        );
-                }
-
-                this.recordPvpIndividualPlacement(
-                    playerTeam,
-                    playerName,
-                    finalPosition
-                );
-            }
-        }
-
-        recordPvpIndividualPlacement(teamName, playerName, position) {
-            const canonical =
-                this.state.resolveCanonicalPlayer(playerName);
-
-            const ps =
-                this.state.getOrCreatePlayerStats(
-                    canonical,
-                    teamName
-                );
-
-            ps.placement =
-                global.Hive.ChatUtils.ordinal(position);
-
-            const normalKey =
-                this.placementKey(position);
-
-            if (!normalKey) return;
-
-            const key =
-                `Indiv ${normalKey}`;
-
-            const score =
-                this.state.ensureScore(teamName);
-
-            const already =
-                score.placements.some(p =>
-                    p.player === canonical &&
-                    p.type === 'pvp-individual'
-                );
-
-            if (already) return;
-
-            this.awardPoints(
-                teamName,
-                key
-            );
-
-            score.placements.push({
-                player: canonical,
-                position,
-                type: 'pvp-individual',
-                time: new Date().toISOString()
-            });
         }
 
         /**
@@ -694,17 +557,12 @@
          */
         currentPlayerContribution(playerName, playerData) {
             if (!playerData || !playerData.team) return 0;
-
-            const teamScore = this.state.scores[playerData.team];
-            const table = this.points.forGamemode(this.state.gamemode) || {};
-            const features = this.points.featuresFor(this.state.gamemode) || {};
-
             return this.playerContribution(
-                teamScore,
+                this.state.scores[playerData.team],
                 playerName,
                 playerData,
-                table,
-                features
+                this.points.forGamemode(this.state.gamemode) || {},
+                this.points.featuresFor(this.state.gamemode) || {}
             );
         }
 
@@ -717,17 +575,12 @@
          */
         gamePlayerContribution(game, playerName, playerData) {
             if (!game || !playerData || !playerData.team || !game.scores) return 0;
-
-            const teamScore = game.scores[playerData.team];
-            const table = this.points.forGamemode(game.gamemode) || {};
-            const features = this.points.featuresFor(game.gamemode) || {};
-
             return this.playerContribution(
-                teamScore,
+                game.scores[playerData.team],
                 playerName,
                 playerData,
-                table,
-                features
+                this.points.forGamemode(game.gamemode) || {},
+                this.points.featuresFor(game.gamemode) || {}
             );
         }
     }
@@ -737,7 +590,5 @@
     global.Hive = global.Hive || {};
     global.Hive.ScoringEngine = ScoringEngine;
 
-    if (typeof module !== 'undefined' && module.exports) {
-        module.exports = ScoringEngine;
-    }
+    if (typeof module !== 'undefined' && module.exports) module.exports = ScoringEngine;
 })(typeof window !== 'undefined' ? window : globalThis);
