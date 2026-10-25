@@ -1,17 +1,14 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hive Event Scorer - Main</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;700;800&display=swap"
-        rel="stylesheet">
-    <link rel="icon" href="assets/icon-16.png">
-    <link rel="stylesheet" href="css/global.css">
-    <link rel="stylesheet" href="css/app.css">
+    <link rel="icon" href="Assets/Icon16.png">
+    <link rel="preload" href="Fonts/MinecraftTen.ttf" as="font" type="font/ttf" crossorigin>
+    <link rel="stylesheet" href="CSS/Global.css">
+    <link rel="stylesheet" href="CSS/App.css">
 </head>
 
 <body>
@@ -25,7 +22,7 @@
                 <div class="title-section">
                     <h1 class="minecraft-title">HIVE EVENT SCORER</h1>
                     <p class="subtitle">Track player scores from chat text across all Hive gamemodes</p>
-                    <p class="disclaimer">⚠️ Non-Profit Project - Not affiliated with The Hive</p>
+                    <p class="disclaimer">Non-Profit Project - Not affiliated with The Hive</p>
                 </div>
                 <input type="file" id="fileInput" accept=".json" class="hidden-input" aria-label="Upload JSON file">
             </div>
@@ -43,7 +40,6 @@
 
         <div id="scorer" class="tab-content active">
             <div class="main-content">
-                <!-- Quick Stats -->
                 <div class="quick-stats">
                     <div class="stat-card">
                         <div class="stat-value" id="totalTeams">0</div>
@@ -63,19 +59,16 @@
                     </div>
                 </div>
 
-                <!-- Gamemode Selection -->
                 <div class="section gamemode-section">
                     <span class="gamemode-icon">Game</span>
                     <div>
                         <label for="gamemode">Select Gamemode:</label>
                         <select id="gamemode">
                             <option value="">-- Choose a Gamemode --</option>
-                            <!-- Populated dynamically from the configured point systems. -->
                         </select>
                     </div>
                 </div>
 
-                <!-- Chat Input Area -->
                 <div class="section chat-input-section">
                     <div class="section-header">
                         <h2>Chat Text Input</h2>
@@ -96,7 +89,6 @@
                     </div>
                 </div>
 
-                <!-- Manual events (bed breaks can't be attributed from the log) -->
                 <div id="manualEvents" class="section manual-events hidden">
                     <div class="section-header">
                         <h2>Manual Events</h2>
@@ -111,7 +103,6 @@
                     </div>
                 </div>
 
-                <!-- Scoreboard -->
                 <div class="section">
                     <div class="section-header">
                         <h2>Scoreboard</h2>
@@ -126,7 +117,6 @@
                     </div>
                 </div>
 
-                <!-- Activity Log -->
                 <div class="section">
                     <div class="section-header">
                         <h2>Activity Log</h2>
@@ -139,10 +129,8 @@
             </div>
         </div>
 
-        <!-- Teams Tab -->
         <div id="teams" class="tab-content">
             <div class="teams-container">
-                <!-- Add Player to Team -->
                 <div class="section">
                     <h2 class="section-title">Add Players to Teams</h2>
                     <div class="team-creator">
@@ -184,7 +172,6 @@
                     </div>
                 </div>
 
-                <!-- Teams Display -->
                 <div class="section">
                     <div class="section-header">
                         <h2>Teams</h2>
@@ -205,10 +192,8 @@
             </div>
         </div>
 
-        <!-- Stats Tab -->
         <div id="stats" class="tab-content">
             <div class="stats-container">
-                <!-- Event standings: team totals + their players' totals -->
                 <div class="section">
                     <div class="section-header">
                         <h2 class="section-title">Event Standings</h2>
@@ -226,7 +211,6 @@
                     </div>
                 </div>
 
-                <!-- Compact all-players totals -->
                 <div class="section section-spacing">
                     <h2 class="section-title">All Players</h2>
                     <p class="help-text">Every player ranked by total points. Click a player to see all their games
@@ -239,7 +223,6 @@
             </div>
         </div>
 
-        <!-- History Tab -->
         <div id="history" class="tab-content">
             <div class="stats-container">
                 <div class="section">
@@ -254,58 +237,31 @@
                 </div>
             </div>
         </div>
-        <!-- Player detail modal -->
         <div id="playerModal" class="modal" aria-hidden="true">
             <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="playerModalTitle">
                 <div class="modal-header">
                     <h2 id="playerModalTitle">Player</h2>
-                    <button
-                        type="button"
-                        id="playerModalClose"
-                        class="modal-close"
-                        aria-label="Close dialog"
-                    >
-                        ×
-                    </button>
+                    <button type="button" id="playerModalClose" class="modal-close" aria-label="Close dialog">&times;</button>
                 </div>
-
                 <div id="playerModalBody" class="modal-body"></div>
             </div>
         </div>
 
-        <!-- Team points detail modal -->
         <div id="teamPointsModal" class="modal" aria-hidden="true">
             <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="teamPointsModalTitle">
                 <div class="modal-header">
                     <h2 id="teamPointsModalTitle">Team Points</h2>
-                    <button
-                        type="button"
-                        id="teamPointsModalClose"
-                        class="modal-close"
-                        aria-label="Close dialog"
-                    >
-                        ×
-                    </button>
+                    <button type="button" id="teamPointsModalClose" class="modal-close" aria-label="Close dialog">&times;</button>
                 </div>
-
                 <div id="teamPointsModalBody" class="modal-body"></div>
             </div>
         </div>
-            <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="playerModalTitle">
-                <div class="modal-header">
-                    <h2 id="playerModalTitle">Player</h2>
-                    <button type="button" id="playerModalClose" class="modal-close" aria-label="Close dialog">×</button>
-                </div>
-                <div id="playerModalBody" class="modal-body"></div>
-            </div>
-        </div>
 
-        <!-- Export poster modal: edit event title + team display names before export -->
         <div id="exportModal" class="modal" aria-hidden="true">
             <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="exportModalTitle">
                 <div class="modal-header">
                     <h2 id="exportModalTitle">Export Poster</h2>
-                    <button type="button" id="exportModalClose" class="modal-close" aria-label="Close dialog">×</button>
+                    <button type="button" id="exportModalClose" class="modal-close" aria-label="Close dialog">&times;</button>
                 </div>
                 <div class="modal-body">
                     <div class="pattern-group">
@@ -313,7 +269,7 @@
                         <input type="text" id="exportEventTitle" placeholder="e.g. The Best Event Ever!">
                     </div>
                     <p class="help-text">Edit team display names below if you want different labels on the poster.
-                        These overrides apply to the exported image only — they don't change your teams.</p>
+                        These overrides apply to the exported image only - they don't change your teams.</p>
                     <div id="exportTeamNames" class="export-team-names"></div>
                     <div class="input-actions">
                         <button type="button" id="exportDoWinners" class="btn btn-primary">Download Winners PNG</button>
@@ -323,7 +279,6 @@
             </div>
         </div>
 
-        <!-- Settings Tab -->
         <div id="settings" class="tab-content">
             <div class="settings-container settings-columns">
                 <div class="section settings-col-left">
@@ -334,9 +289,8 @@
                         <div class="gamemode-dropdown-container">
                             <label for="settingsGamemode">Select Gamemode to Configure:</label>
                             <select id="settingsGamemode" class="gamemode-select">
-                                <!-- Populated dynamically from the configured point systems. -->
                             </select>
-                            <span class="selector-hint">👆 Click here to choose which gamemode to edit</span>
+                            <span class="selector-hint">Click here to choose which gamemode to edit</span>
                         </div>
                         <div class="gamemode-actions">
                             <button type="button" id="addNewGamemode" class="btn btn-primary">+ New Gamemode</button>
@@ -345,31 +299,30 @@
                     </div>
 
                     <div id="pointsSettings" class="points-settings">
-                        <!-- Points settings will be dynamically populated -->
                     </div>
 
                     <div class="detection-patterns-section">
                         <h3>Detection Patterns</h3>
-                        <p class="help-text">Configure what chat messages trigger scoring events. Use § for Minecraft
+                        <p class="help-text">Configure what chat messages trigger scoring events. Use &sect; for Minecraft
                             color codes.</p>
 
                         <div class="pattern-group">
                             <label>Team Elimination Pattern:</label>
                             <input type="text" id="patternTeamElim" class="pattern-input"
-                                placeholder="§c§l» [PLAYER] has been ELIMINATED">
+                                placeholder="&sect;c&sect;l&raquo; [PLAYER] has been ELIMINATED">
                             <span class="pattern-help">Detects when a team is eliminated</span>
                         </div>
 
                         <div class="pattern-group">
                             <label>Winner Pattern:</label>
                             <input type="text" id="patternWinner" class="pattern-input"
-                                placeholder="§c§l» [PLAYER] is the WINNER">
+                                placeholder="&sect;c&sect;l&raquo; [PLAYER] is the WINNER">
                             <span class="pattern-help">Detects the winning team</span>
                         </div>
 
                         <div class="pattern-group" id="patternKillGroup">
                             <label>Kill Prefix:</label>
-                            <input type="text" id="patternKillPrefix" class="pattern-input" placeholder="§c§l»">
+                            <input type="text" id="patternKillPrefix" class="pattern-input" placeholder="&sect;c&sect;l&raquo;">
                             <span class="pattern-help">Prefix that appears before kill messages</span>
                         </div>
 
@@ -483,10 +436,9 @@
         </div>
     </div>
 
-    <!-- Drag & drop overlay -->
     <div id="dropOverlay" class="drop-overlay">
         <div class="drop-overlay-inner">
-            <div class="drop-icon">⬇</div>
+            <div class="drop-icon">&darr;</div>
             <h2>Drop a log or save file</h2>
             <p>.txt chat logs are matched to a gamemode by filename and processed automatically.
                 .json files load tournament data.</p>
@@ -496,46 +448,43 @@
     <footer class="app-footer">
         <div class="footer-content">
             <div class="footer-section">
-                <p class="footer-text">Created by <strong>PrimeStrat</strong></p>
-                <p class="footer-text">© 2026 Prime Software Development. All rights reserved.</p>
+                <p class="footer-text">Created by <strong>Prime Software Development</strong> (PrimeStrat)</p>
+                <p class="footer-text">With community help from SandRosey and others. MIT License: free to use, fork and improve with credit.</p>
             </div>
             <div class="footer-section">
                 <p class="footer-disclaimer">Not affiliated with or endorsed by The Hive.</p>
+                <p class="footer-disclaimer">Provided as-is with no warranty. We take no responsibility for misuse or any result of using it.</p>
             </div>
         </div>
     </footer>
 
-    <!-- Core (load order matters: utilities -> state -> engine) -->
-    <script src="js/core/ChatUtils.js"></script>
-    <script src="js/core/Storage.js"></script>
-    <script src="js/core/Toast.js"></script>
-    <script src="js/core/FileImport.js"></script>
-    <script src="js/core/PosterExport.js"></script>
-    <script src="js/core/PointSystem.js"></script>
-    <script src="js/core/GameState.js"></script>
-    <script src="js/core/ScoringEngine.js"></script>
+    <script src="JS/Core/ChatUtils.js"></script>
+    <script src="JS/Core/Storage.js"></script>
+    <script src="JS/Core/Toast.js"></script>
+    <script src="JS/Core/FileImport.js"></script>
+    <script src="JS/Core/PosterExport.js"></script>
+    <script src="JS/Core/PointSystem.js"></script>
+    <script src="JS/Core/GameState.js"></script>
+    <script src="JS/Core/ScoringEngine.js"></script>
 
-    <!-- Parsers: base, shared survival base, then per-gamemode subclasses, then registry -->
-    <script src="js/parsers/GamemodeParser.js"></script>
-    <script src="js/parsers/SurvivalLastStandingParser.js"></script>
-    <script src="js/parsers/BedWarsParser.js"></script>
-    <script src="js/parsers/SkyWarsParser.js"></script>
-    <script src="js/parsers/SurvivalGamesParser.js"></script>
-    <script src="js/parsers/DeathRunParser.js"></script>
-    <script src="js/parsers/GravityParser.js"></script>
-    <script src="js/parsers/BlockDropParser.js"></script>
-    <script src="js/parsers/BlockPartyParser.js"></script>
-    <script src="js/parsers/index.js"></script>
+    <script src="JS/Parsers/GamemodeParser.js"></script>
+    <script src="JS/Parsers/SurvivalLastStandingParser.js"></script>
+    <script src="JS/Parsers/BedWarsParser.js"></script>
+    <script src="JS/Parsers/SkyWarsParser.js"></script>
+    <script src="JS/Parsers/SurvivalGamesParser.js"></script>
+    <script src="JS/Parsers/DeathRunParser.js"></script>
+    <script src="JS/Parsers/GravityParser.js"></script>
+    <script src="JS/Parsers/BlockDropParser.js"></script>
+    <script src="JS/Parsers/BlockPartyParser.js"></script>
+    <script src="JS/Parsers/ParserRegistry.js"></script>
 
-    <!-- Renderers -->
-    <script src="js/renderers/Renderer.js"></script>
-    <script src="js/renderers/ScoreboardRenderer.js"></script>
-    <script src="js/renderers/TeamsRenderer.js"></script>
-    <script src="js/renderers/StatsRenderer.js"></script>
-    <script src="js/renderers/SettingsRenderer.js"></script>
+    <script src="JS/Renderers/Renderer.js"></script>
+    <script src="JS/Renderers/ScoreboardRenderer.js"></script>
+    <script src="JS/Renderers/TeamsRenderer.js"></script>
+    <script src="JS/Renderers/StatsRenderer.js"></script>
+    <script src="JS/Renderers/SettingsRenderer.js"></script>
 
-    <!-- App controller (boots on DOMContentLoaded) -->
-    <script src="js/app.js"></script>
+    <script src="JS/App.js"></script>
 </body>
 
 </html>

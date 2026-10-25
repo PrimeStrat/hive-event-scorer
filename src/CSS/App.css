@@ -1,9 +1,3 @@
-/* =====================================================================
-   Hive Event Scorer — components
-   Single component sheet (replaces the old main/teams/stats/settings sheets).
-   ===================================================================== */
-
-/* ---------- header ---------- */
 header {
     position: relative;
     padding: 18px 24px;
@@ -38,7 +32,6 @@ header {
 .subtitle { color: var(--text-soft); font-size: 0.9rem; margin-top: 8px; }
 .disclaimer { color: var(--text-muted); font-size: 0.75rem; margin-top: 4px; }
 
-/* ---------- nav tabs ---------- */
 nav ul {
     display: flex;
     gap: 6px;
@@ -68,11 +61,9 @@ nav ul {
     border-bottom: 2px solid var(--hive-purple);
 }
 
-/* ---------- tab content ---------- */
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
-/* ---------- sections / cards ---------- */
 .section {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -95,7 +86,6 @@ nav ul {
 .section-header h2, .section-title { font-size: 1.1rem; }
 .section-title { margin-bottom: 6px; }
 
-/* ---------- buttons ---------- */
 .btn {
     font-family: var(--font-body);
     font-size: 0.88rem;
@@ -122,13 +112,6 @@ nav ul {
 .btn-danger:hover { background: rgba(248, 113, 113, .12); }
 .btn-info { border-color: var(--hive-purple-light); color: var(--hive-purple-light); }
 .btn-info:hover { background: rgba(167, 139, 250, .12); }
-.btn-secondary { /* default look */ }
-.btn-small { padding: 5px 10px; font-size: 0.78rem; }
-
-.action-buttons, .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
-.input-actions, .settings-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
-
-/* ---------- forms ---------- */
 label { display: block; color: var(--text-soft); font-size: 0.85rem; margin-bottom: 6px; font-weight: 600; }
 
 input[type="text"], input[type="number"], select, textarea {
@@ -148,7 +131,6 @@ input:focus, select:focus, textarea:focus {
 textarea { resize: vertical; min-height: 90px; }
 #chatInput { min-height: 160px; font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: 0.85rem; }
 
-/* ---------- quick stats ---------- */
 .quick-stats {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -165,7 +147,6 @@ textarea { resize: vertical; min-height: 90px; }
 .stat-value { font-size: 1.8rem; font-weight: 800; color: var(--hive-yellow); }
 .stat-label { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: .5px; }
 
-/* ---------- gamemode select row ---------- */
 .gamemode-section { display: flex; align-items: flex-end; gap: 16px; }
 .gamemode-section > div { flex: 1; }
 .gamemode-icon {
@@ -175,7 +156,6 @@ textarea { resize: vertical; min-height: 90px; }
     padding-bottom: 10px;
 }
 
-/* ---------- scoreboard (live) ---------- */
 .scoreboard { display: grid; gap: 10px; }
 .score-item {
     display: flex;
@@ -198,7 +178,6 @@ textarea { resize: vertical; min-height: 90px; }
 .team-stats { color: var(--text-muted); font-size: 0.8rem; }
 .score-value { font-weight: 800; color: var(--hive-yellow); }
 
-/* ---------- activity log ---------- */
 .activity-log { max-height: 280px; overflow-y: auto; display: grid; gap: 4px; }
 .log-entry {
     display: flex;
@@ -215,7 +194,6 @@ textarea { resize: vertical; min-height: 90px; }
 .log-time { color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .log-message { color: var(--text-soft); }
 
-/* ---------- teams ---------- */
 .team-creator { display: grid; grid-template-columns: 1fr 1fr auto; gap: 14px; align-items: end; }
 .create-team-button { align-self: end; }
 .bulk-player-entry { margin-top: 18px; }
@@ -231,7 +209,6 @@ textarea { resize: vertical; min-height: 90px; }
 .player-list { display: grid; gap: 6px; }
 .player-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; background: var(--surface); border-radius: var(--radius-sm); padding: 6px 10px; }
 .player-item-left { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
-/* Player names are capped at 15 chars, so reserve a fixed column for them and let the team select take the rest. */
 .player-item-left .player-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 0 auto; width: 15ch; }
 .change-team-select { padding: 3px 6px; font-size: 0.78rem; flex: 1 1 auto; min-width: 0; }
 .no-players { color: var(--text-muted); font-style: italic; font-size: 0.85rem; }
@@ -242,11 +219,6 @@ textarea { resize: vertical; min-height: 90px; }
 }
 .remove-player-btn:hover { background: rgba(248,113,113,.15); }
 
-/* =====================================================================
-   STATISTICS — redesigned: compact, readable, click-through to detail
-   ===================================================================== */
-
-/* Event standings: team blocks each listing their players' totals */
 .event-standings { display: grid; gap: 14px; }
 .standings-team {
     background: var(--surface-2);
@@ -272,7 +244,6 @@ textarea { resize: vertical; min-height: 90px; }
 .standings-player .pmeta { color: var(--text-muted); font-size: 0.8rem; }
 .standings-player .ppts { font-weight: 800; color: var(--text); min-width: 48px; text-align: right; }
 
-/* Compact "all players" total list */
 .player-totals { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
 .player-total-chip {
     display: flex; align-items: center; gap: 10px;
@@ -284,7 +255,6 @@ textarea { resize: vertical; min-height: 90px; }
 .player-total-chip .ptc-name { flex: 1; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .player-total-chip .ptc-pts { font-weight: 800; color: var(--hive-yellow); }
 
-/* current-game player stats grid (kept, simplified) */
 .player-stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--gap); }
 .player-stat-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
 .player-stat-card.mini { padding: 10px; }
@@ -299,7 +269,6 @@ textarea { resize: vertical; min-height: 90px; }
 .player-performance-toolbar label { margin: 0; }
 .player-performance-toolbar select { width: auto; }
 
-/* point record */
 .point-record { display: grid; gap: 14px; }
 .point-record-team { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 18px; }
 .pr-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-weight: 700; }
@@ -308,7 +277,6 @@ textarea { resize: vertical; min-height: 90px; }
 .pr-events li { display: flex; justify-content: space-between; padding: 5px 10px; background: var(--surface); border-radius: var(--radius-sm); font-size: 0.85rem; }
 .pr-pts { color: var(--hive-gold); font-weight: 700; }
 
-/* game history */
 .game-history-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
 .game-history-card.editing { border-color: var(--hive-purple); }
 .game-header { display: flex; justify-content: space-between; align-items: center; }
@@ -324,7 +292,6 @@ textarea { resize: vertical; min-height: 90px; }
 .score-editor-input { width: 90px; }
 .game-score-editor-help { color: var(--text-muted); font-size: 0.8rem; margin-bottom: 8px; }
 
-/* ---------- settings ---------- */
 .gamemode-selector { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 18px; }
 .gamemode-dropdown-container { flex: 1; min-width: 240px; }
 .selector-hint { color: var(--text-muted); font-size: 0.78rem; }
@@ -340,7 +307,6 @@ textarea { resize: vertical; min-height: 90px; }
 .misc-toggles-section { border-top: 1px solid var(--border); padding-top: 18px; margin: 8px 0 18px; }
 .misc-toggles-section h3 { margin-bottom: 6px; }
 
-/* ---------- settings two-column layout ---------- */
 .settings-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 420px); gap: var(--gap); align-items: start; }
 .settings-col-right { position: sticky; top: 12px; }
 @media (max-width: 980px) {
@@ -351,7 +317,6 @@ textarea { resize: vertical; min-height: 90px; }
 .presets-section h3 { margin-bottom: 6px; }
 .preset-controls { display: flex; flex-direction: column; gap: 10px; }
 
-/* ---------- teams/subs view switcher ---------- */
 .team-view-tabs { display: flex; gap: 6px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
 .team-view-tab { font-family: var(--font-body); font-size: 0.88rem; font-weight: 600; padding: 8px 18px; background: transparent; border: 1px solid transparent; border-bottom: none; border-radius: var(--radius-sm) var(--radius-sm) 0 0; color: var(--text-soft); cursor: pointer; margin-bottom: -1px; }
 .team-view-tab:hover { color: var(--text); background: var(--surface-2); }
@@ -362,7 +327,6 @@ textarea { resize: vertical; min-height: 90px; }
 .remove-sub-btn { background: transparent; border: 1px solid var(--danger); color: var(--danger); border-radius: var(--radius-sm); width: 24px; height: 24px; cursor: pointer; flex-shrink: 0; line-height: 1; }
 .remove-sub-btn:hover { background: rgba(248, 113, 113, .12); }
 
-/* ---------- manual events ---------- */
 .manual-event-row { display: flex; gap: 10px; align-items: center; }
 .manual-event-row select { max-width: 320px; }
 .detection-patterns-section { border-top: 1px solid var(--border); padding-top: 18px; margin-top: 8px; }
@@ -371,7 +335,6 @@ textarea { resize: vertical; min-height: 90px; }
 .checkbox-label { display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 0; }
 .checkbox-label input[type="checkbox"] { width: auto; margin: 0; flex-shrink: 0; accent-color: var(--hive-purple); cursor: pointer; }
 
-/* ---------- modal (player detail / game detail) ---------- */
 .modal { position: fixed; inset: 0; background: rgba(8, 6, 16, .72); display: none; align-items: center; justify-content: center; padding: 24px; z-index: 1000; }
 .modal.open { display: flex; }
 .modal-dialog { background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); width: 100%; max-width: 720px; max-height: 85vh; overflow: auto; }
@@ -388,14 +351,12 @@ textarea { resize: vertical; min-height: 90px; }
 .pd-game-head { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 6px; }
 .pd-game-stats { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.82rem; color: var(--text-soft); }
 
-/* ---------- export dialog ---------- */
 .export-team-names { display: grid; gap: 8px; margin: 12px 0 4px; }
 .export-team-row { display: flex; align-items: center; gap: 10px; }
 .export-team-swatch { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; }
 .export-team-input { flex: 1; }
 .export-team-pts { color: var(--text-muted); font-size: 0.82rem; min-width: 56px; text-align: right; }
 
-/* ---------- toast ---------- */
 .toast-stack { position: fixed; top: 18px; right: 18px; display: grid; gap: 10px; z-index: 1100; max-width: 320px; }
 .toast {
     background: var(--surface);
@@ -415,21 +376,16 @@ textarea { resize: vertical; min-height: 90px; }
 .toast.warning { border-left-color: var(--warning); }
 .toast strong { color: var(--hive-yellow); display: block; margin-bottom: 2px; }
 
-/* ---------- footer ---------- */
 .app-footer { border-top: 1px solid var(--border); margin-top: 30px; padding: 20px 24px; }
 .footer-content { max-width: 1280px; margin: 0 auto; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
 .footer-text, .footer-disclaimer { color: var(--text-muted); font-size: 0.8rem; }
 
-/* ---------- print / export note ---------- */
 .export-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
-/* ---------- drag & drop overlay ---------- */
 .drop-overlay {
     position: fixed; inset: 0; z-index: 1200;
     display: none; align-items: center; justify-content: center;
-    background: rgba(12, 9, 24, .82);
-    -webkit-backdrop-filter: blur(2px);
-    backdrop-filter: blur(2px);
+    background: rgba(12, 9, 24, .92);
     padding: 24px;
 }
 .drop-overlay.show { display: flex; }
@@ -445,9 +401,8 @@ textarea { resize: vertical; min-height: 90px; }
 .drop-overlay h2 { color: var(--hive-yellow); margin-bottom: 8px; }
 .drop-overlay p { color: var(--text-soft); font-size: 0.9rem; }
 
-/* ---------- responsive ---------- */
 @media (max-width: 720px) {
-    header { padding-bottom: 52px; } /* room for the absolute-positioned save buttons */
+    header { padding-bottom: 52px; }
     .team-creator { grid-template-columns: 1fr; }
     .gamemode-section { flex-direction: column; align-items: stretch; }
 }

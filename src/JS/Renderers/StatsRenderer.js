@@ -6,6 +6,22 @@
     'use strict';
     const Base = global.Hive.renderers.Renderer;
 
+    const TEAM_BONUS_TYPES = new Set([
+        'First full team finish', 'Second full team finish', 'Third full team finish',
+        'Last team standing', 'Second last team standing', 'Third last team standing'
+    ]);
+    const PLACEMENT_RE = /^(\d+)(?:st|nd|rd|th) place$/i;
+
+    /**
+     * @typedef {Object} TeamStanding
+     * @property {string} team Team name.
+     * @property {string} teamColor CSS color.
+     * @property {number} points Event total.
+     * @property {number} teamPoints Points not credited to any player.
+     * @property {Array<{gamemode: string, reason: string, points: number}>} teamPointBreakdown Team-level awards.
+     * @property {Array<{name: string, points: number}>} players Rostered players, best first.
+     */
+
     class StatsRenderer extends Base {
         /**
          * Render the whole Totals tab.
@@ -22,150 +38,80 @@
          * @param {string} teamName Team name.
          * @returns {string} CSS color.
          */
-        teamColor(teamName) { return this.state.teams[teamName]?.color || '#7C3AED'; }
+        teamColor(teamName) {
+            return this.state.teams[teamName]?.color || '#7C3AED';
+        }
 
         /**
-         * Per-player totals across all completed games; team points are attributed
-         * so player sums reconcile with team totals.
-         * @returns {Object} Player name to { totalPoints, byGamemode }.
+         * Per-player totals across all completed games.
+         * @returns {Object<string, {totalPoints: number, byGamemode: Object<string, number>}>} Player totals.
          */
         aggregatePlayerScores() {
             const result = {};
-
-            const add = (name, gamemode, pts) => {
-                if (!result[name]) {
-                    result[name] = {
-                        totalPoints: 0,
-                        byGamemode: {}
-                    };
-                }
-
-                result[name].totalPoints += pts;
-
-                result[name].byGamemode[gamemode] =
-                    (result[name].byGamemode[gamemode] || 0) + pts;
-            };
-
             for (const game of this.state.gameHistory) {
-                for (const [teamName] of Object.entries(game.scores || {})) {
+                for (const teamName of Object.keys(game.scores || {})) {
                     if (teamName === 'UNKNOWN') continue;
-
                     const team = this.state.teams[teamName];
                     if (!team || !team.players) continue;
-
-                    const players = team.players.filter(
-                        player => game.playerStats?.[player]
-                    );
-
-                    for (const name of players) {
-                        const pts = this.engine.gamePlayerContribution(
-                            game,
-                            name,
-                            game.playerStats[name]
-                        );
-
-                        add(name, game.gamemode, pts);
+                    for (const name of team.players.filter(p => game.playerStats?.[p])) {
+                        const pts = this.engine.gamePlayerContribution(game, name, game.playerStats[name]);
+                        const entry = result[name] = result[name] || { totalPoints: 0, byGamemode: {} };
+                        entry.totalPoints += pts;
+                        entry.byGamemode[game.gamemode] = (entry.byGamemode[game.gamemode] || 0) + pts;
                     }
                 }
             }
-
             return result;
         }
 
+        /**
+         * Team-level awards (team bonuses, and placements in team-placement modes).
+         * @param {string} teamName Team name.
+         * @returns {{total: number, breakdown: Array<{gamemode: string, reason: string, points: number}>}} Breakdown.
+         */
         teamPointBreakdown(teamName) {
             const breakdown = [];
             let total = 0;
-
             for (const game of this.state.gameHistory) {
                 const teamScore = game.scores?.[teamName];
                 if (!teamScore) continue;
-
                 const features = this.points.featuresFor(game.gamemode) || {};
-
-                // Only these explicit event types are always team-level bonuses.
-                const teamBonusTypes = new Set([
-                    'First full team finish',
-                    'Second full team finish',
-                    'Third full team finish',
-
-                    'Last team standing',
-                    'Second last team standing',
-                    'Third last team standing'
-                ]);
-
                 for (const event of teamScore.events || []) {
-                    let isTeamEvent = teamBonusTypes.has(event.type);
-
-                    // Placement points are team points only in team-placement modes.
-                    const placementMatch = String(event.type || '').match(
-                        /^(\d+)(?:st|nd|rd|th) place$/i
-                    );
-
-                    if (
-                        placementMatch &&
-                        features.teamElimination
-                    ) {
-                        isTeamEvent = true;
-                    }
-
-                    if (!isTeamEvent) continue;
-
+                    const type = String(event.type || '');
+                    const isTeamEvent = TEAM_BONUS_TYPES.has(type) || (features.teamElimination && PLACEMENT_RE.test(type));
                     const points = Number(event.points || 0);
-
-                    if (points === 0) continue;
-
-                    breakdown.push({
-                        gamemode: game.gamemode,
-                        reason: event.type,
-                        points
-                    });
-
+                    if (!isTeamEvent || points === 0) continue;
+                    breakdown.push({ gamemode: game.gamemode, reason: type, points });
                     total += points;
                 }
             }
-
-            return {
-                total,
-                breakdown
-            };
+            return { total, breakdown };
         }
 
         /**
          * Cumulative team standings with per-player totals.
-         * @returns {Array<Object>} Sorted desc by points.
+         * @returns {TeamStanding[]} Sorted desc by points.
          */
         aggregateTeamStandings() {
             const playerScores = this.aggregatePlayerScores();
             const teams = {};
             for (const game of this.state.gameHistory) {
-                for (const [teamName, teamScore] of Object.entries(game.scores)) {
+                for (const [teamName, teamScore] of Object.entries(game.scores || {})) {
                     if (teamName === 'UNKNOWN' || !this.state.teams[teamName]) continue;
                     teams[teamName] = (teams[teamName] || 0) + teamScore.score;
                 }
             }
             return Object.entries(teams).map(([teamName, points]) => {
-                const roster = this.state.teams[teamName]?.players || [];
-                const players = roster
+                const players = (this.state.teams[teamName]?.players || [])
                     .map(name => ({ name, points: playerScores[name] ? playerScores[name].totalPoints : 0 }))
                     .sort((a, b) => b.points - a.points);
-                const teamPointData = this.teamPointBreakdown(teamName);
-
-                const playerPoints = players.reduce(
-                    (sum, player) => sum + player.points,
-                    0
-                );
-
-                const teamPoints = Math.max(
-                    0,
-                    points - playerPoints
-                );
-
+                const playerPoints = players.reduce((sum, player) => sum + player.points, 0);
                 return {
                     team: teamName,
                     teamColor: this.teamColor(teamName),
                     points,
-                    teamPoints,
-                    teamPointBreakdown: teamPointData.breakdown,
+                    teamPoints: Math.max(0, points - playerPoints),
+                    teamPointBreakdown: this.teamPointBreakdown(teamName).breakdown,
                     players
                 };
             }).sort((a, b) => b.points - a.points);
@@ -173,19 +119,13 @@
 
         /**
          * Ranked list of every rostered player's total.
-         * @returns {Array<Object>} Sorted desc by points.
+         * @returns {Array<{name: string, team: string, teamColor: string, points: number, byGamemode: Object<string, number>}>} Sorted desc by points.
          */
         playerStandingsList() {
-            const scores = this.aggregatePlayerScores();
-            return Object.entries(scores)
-                .filter(([name]) => {
-                    const t = this.state.findPlayerTeam(name);
-                    return t && t !== 'UNKNOWN';
-                })
-                .map(([name, data]) => {
-                    const team = this.state.findPlayerTeam(name);
-                    return { name, team, teamColor: this.teamColor(team), points: data.totalPoints, byGamemode: data.byGamemode };
-                })
+            return Object.entries(this.aggregatePlayerScores())
+                .map(([name, data]) => ({ name, team: this.state.findPlayerTeam(name), data }))
+                .filter(p => p.team && p.team !== 'UNKNOWN')
+                .map(p => ({ name: p.name, team: p.team, teamColor: this.teamColor(p.team), points: p.data.totalPoints, byGamemode: p.data.byGamemode }))
                 .sort((a, b) => b.points - a.points);
         }
 
@@ -249,87 +189,48 @@
                     </div>
                     <div class="standings-players">
                         ${t.teamPoints > 0 ? `
-                            <div
-                                class="standings-player standings-team-points"
-                                data-team-points="${this.escapeHtml(t.team)}"
-                                tabindex="0"
-                                role="button"
-                            >
-                                <span class="pname">Team Points</span>
-                                <span class="ppts">${t.teamPoints}</span>
-                            </div>
-                        ` : ''}
-
+                        <div class="standings-player standings-team-points" data-team-points="${this.escapeHtml(t.team)}" tabindex="0" role="button">
+                            <span class="pname">Team Points</span>
+                            <span class="ppts">${t.teamPoints}</span>
+                        </div>` : ''}
                         ${t.players.map(p => `
-                            <div class="standings-player" data-player="${this.escapeHtml(p.name)}">
-                                <span class="pname">${this.escapeHtml(p.name)}</span>
-                                <span class="ppts">${p.points}</span>
-                            </div>
-                        `).join('')}
-
+                        <div class="standings-player" data-player="${this.escapeHtml(p.name)}">
+                            <span class="pname">${this.escapeHtml(p.name)}</span>
+                            <span class="ppts">${p.points}</span>
+                        </div>`).join('')}
                     </div>
                 </div>`).join('');
 
             this.attachPlayerClicks(host);
             host.querySelectorAll('[data-team-points]').forEach(el => {
                 el.addEventListener('click', () => {
-                    const teamName = el.dataset.teamPoints;
-                    const team = standings.find(t => t.team === teamName);
-
-                    if (team) {
-                        this.openTeamPointsModal(team);
-                    }
+                    this.openTeamPointsModal(standings.find(t => t.team === el.dataset.teamPoints));
                 });
             });
         }
 
+        /**
+         * Show the team-level points breakdown for one team.
+         * @param {TeamStanding} team Team standing.
+         * @returns {void}
+         */
         openTeamPointsModal(team) {
-            if (!team) return;
+            const title = this.$('teamPointsModalTitle');
+            const body = this.$('teamPointsModalBody');
+            if (!team || !title || !body) return;
 
-            const modal = document.getElementById('teamPointsModal');
-            const title = document.getElementById('teamPointsModalTitle');
-            const body = document.getElementById('teamPointsModalBody');
-
-            if (!modal || !title || !body) return;
-
-            title.textContent =
-                `${team.team} — Team Points (${team.teamPoints})`;
-
-            if (!team.teamPointBreakdown?.length) {
-                body.innerHTML =
-                    '<p class="empty-state">No team-point details available.</p>';
-
-                modal.classList.add('open');
-                return;
-            }
-
-            body.innerHTML = `
-                <div class="team-points-breakdown">
-                    ${team.teamPointBreakdown.map(item => `
-                        <div class="pd-game">
-                            <div class="pd-game-head">
-                                <span>
-                                    ${this.escapeHtml(item.gamemode)}
-                                </span>
-
-                                <span>
-                                    +${item.points} pts
-                                </span>
-                            </div>
-
-                            <div class="pd-game-stats">
-                                <span>
-                                    ${this.escapeHtml(item.reason)}
-                                </span>
-                            </div>
+            title.textContent = `${team.team} - Team Points (${team.teamPoints})`;
+            body.innerHTML = team.teamPointBreakdown?.length
+                ? `<div class="team-points-breakdown">${team.teamPointBreakdown.map(item => `
+                    <div class="pd-game">
+                        <div class="pd-game-head">
+                            <span>${this.escapeHtml(item.gamemode)}</span>
+                            <span>+${item.points} pts</span>
                         </div>
-                    `).join('')}
-                </div>
-            `;
-
-            modal.setAttribute('aria-hidden', 'false');
-            modal.classList.add('open');
-            return;
+                        <div class="pd-game-stats"><span>${this.escapeHtml(item.reason)}</span></div>
+                    </div>`).join('')}</div>`
+                : '<p class="empty-state">No team-point details available.</p>';
+            this.openModal('teamPointsModal');
         }
 
         /**
@@ -379,7 +280,7 @@
         }
 
         /**
-         * Build one game-history card.
+         * Build one game-history card. Equal scores share a rank (1, 2, 2, 4).
          * @param {Object} game History record.
          * @returns {string} HTML.
          */
@@ -391,7 +292,6 @@
             const teams = Object.entries(game.scores)
                 .filter(([t]) => t !== 'UNKNOWN')
                 .sort((a, b) => b[1].score - a[1].score);
-            // Standard competition ranking: equal scores share a rank (1, 2, 2, 4).
             const ranks = [];
             teams.forEach(([, data], i) => {
                 ranks[i] = (i > 0 && data.score === teams[i - 1][1].score) ? ranks[i - 1] : i + 1;
@@ -400,6 +300,9 @@
             const winners = teams.filter(([, d]) => d.score === topScore);
             const features = this.points.featuresFor(game.gamemode) || {};
             const showCombat = !!features.kills, showBeds = !!features.bedBreaks;
+            const winnerText = winners.length
+                ? winners.map(([t]) => this.escapeHtml(t)).join(', ') + ' (' + topScore + ' pts)'
+                : '-';
 
             return `
                 <div class="game-history-card ${editing ? 'editing' : ''}" data-game-id="${game.id}">
@@ -409,7 +312,7 @@
                     </div>
                     <div class="game-info">
                         <span>Duration: ${duration} min</span>
-                        <span>${winners.length > 1 ? 'Tied' : 'Winner'}: ${winners.length ? winners.map(([t]) => this.escapeHtml(t)).join(', ') + ' (' + topScore + ' pts)' : '-'}</span>
+                        <span>${winners.length > 1 ? 'Tied' : 'Winner'}: ${winnerText}</span>
                     </div>
                     <div class="game-scores">
                         <div class="game-scores-header">
@@ -422,17 +325,14 @@
                             <button type="button" class="btn btn-info btn-small" data-action="edit-game-scores" data-game-id="${game.id}">Edit Scores</button>`}
                         </div>
                         ${editing ? '<p class="game-score-editor-help">Adjust the saved score for any team. Totals refresh on save.</p>' : ''}
-                        ${teams.map(([teamName, data], i) => {
-                            const color = this.teamColor(teamName);
-                            return `
-                                <div class="score-row" style="border-left: 3px solid ${color}">
-                                    <span class="rank">#${ranks[i]}</span>
-                                    <span class="team-name">${this.escapeHtml(teamName)}</span>
-                                    ${editing
-                                        ? `<input type="number" class="score-editor-input" data-team="${this.escapeHtml(teamName)}" value="${data.score}" min="0" />`
-                                        : `<span class="points">${data.score} pts</span>`}
-                                </div>`;
-                        }).join('')}
+                        ${teams.map(([teamName, data], i) => `
+                            <div class="score-row" style="border-left: 3px solid ${this.teamColor(teamName)}">
+                                <span class="rank">#${ranks[i]}</span>
+                                <span class="team-name">${this.escapeHtml(teamName)}</span>
+                                ${editing
+                                    ? `<input type="number" class="score-editor-input" data-team="${this.escapeHtml(teamName)}" value="${data.score}" min="0" />`
+                                    : `<span class="points">${data.score} pts</span>`}
+                            </div>`).join('')}
                     </div>
                     <div class="game-player-stats">
                         <h4>Player Performance</h4>

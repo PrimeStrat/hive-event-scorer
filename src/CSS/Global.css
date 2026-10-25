@@ -1,3 +1,9 @@
+@font-face {
+    font-family: 'MinecraftTen';
+    src: url('../Fonts/MinecraftTen.ttf') format('truetype');
+    font-display: swap;
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -5,14 +11,12 @@
 }
 
 :root {
-    /* Brand */
     --hive-purple: #7C3AED;
     --hive-purple-dark: #5B21B6;
     --hive-purple-light: #A78BFA;
     --hive-yellow: #FACC15;
     --hive-gold: #F59E0B;
 
-    /* Surfaces (calm, slightly-tinted dark — easy on projector/stream) */
     --bg: #15131F;
     --surface: #1E1B2E;
     --surface-2: #272338;
@@ -20,12 +24,10 @@
     --border: #3A3450;
     --border-strong: #4C4568;
 
-    /* Text */
     --text: #F4F2FA;
     --text-soft: #C7C1DC;
     --text-muted: #8B83A6;
 
-    /* Semantic */
     --success: #34D399;
     --warning: #FBBF24;
     --danger: #F87171;
@@ -35,8 +37,8 @@
     --radius-sm: 6px;
     --gap: 16px;
 
-    --font-body: 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
-    --font-display: 'Press Start 2P', var(--font-body);
+    --font-body: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
+    --font-display: 'MinecraftTen', var(--font-body);
 }
 
 body {
@@ -92,7 +94,6 @@ a {
     margin: 4px 0 12px;
 }
 
-/* ---- scrollbars (subtle) ---- */
 ::-webkit-scrollbar {
     width: 10px;
     height: 10px;

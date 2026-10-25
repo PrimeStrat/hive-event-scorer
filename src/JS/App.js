@@ -4,8 +4,12 @@
 (function (global) {
     'use strict';
     const H = global.Hive;
+    const MODAL_IDS = ['playerModal', 'teamPointsModal', 'exportModal'];
 
     class HiveEventScorer {
+        /**
+         * Build state, engine and renderers, then boot the UI.
+         */
         constructor() {
             this.state = new H.GameState();
             this.points = new H.PointSystem();
@@ -111,21 +115,15 @@
             this.on('wipeStats', 'click', () => this.wipeStatistics());
 
             this.on('playerModalClose', 'click', () => this.closeModal('playerModal'));
-            this.on(
-                'teamPointsModalClose',
-                'click',
-                () => this.closeModal('teamPointsModal')
-            );
-            ['playerModal', 'teamPointsModal', 'exportModal'].forEach(id => {
+            this.on('teamPointsModalClose', 'click', () => this.closeModal('teamPointsModal'));
+            MODAL_IDS.forEach(id => {
                 const m = document.getElementById(id);
-                if (m) m.addEventListener('click', e => { if (e.target === m) this.closeModal(id); });
+                if (m) m.addEventListener('click', e => {
+                    if (e.target === m) this.closeModal(id);
+                });
             });
             document.addEventListener('keydown', e => {
-                if (e.key === 'Escape') {
-                    this.closeModal('playerModal');
-                    this.closeModal('teamPointsModal');
-                    this.closeModal('exportModal');
-                }
+                if (e.key === 'Escape') MODAL_IDS.forEach(id => this.closeModal(id));
             });
 
             this.setupTeamManagement();
@@ -155,14 +153,12 @@
                     return;
                 }
                 if (!this.state.gamemode) {
-                    H.Toast.show('Select a gamemode before turning on live capture.',
-                        { title: 'Live capture', type: 'warning', duration: 5000 });
+                    H.Toast.show('Select a gamemode before turning on live capture.', 'Live capture', 'warning', 5000);
                     return;
                 }
                 const res = await bridge.startCapture();
                 if (!res.ok) {
-                    H.Toast.show(`Could not open the chat log at ${res.path}. Is the client installed?`,
-                        { title: 'Live capture', type: 'warning', duration: 7000 });
+                    H.Toast.show(`Could not open the chat log at ${res.path}. Is the client installed?`, 'Live capture', 'warning', 7000);
                     return;
                 }
                 this.state.pushUndo('liveCapture');
@@ -274,7 +270,7 @@
                 return;
             }
             if (!H.FileImport.isTextFile(file)) {
-                H.Toast.show(`"${file.name}" isn't a .txt or .json file.`, { title: 'Unsupported file', type: 'warning' });
+                H.Toast.show(`"${file.name}" isn't a .txt or .json file.`, 'Unsupported file', 'warning');
                 return;
             }
 
@@ -296,12 +292,10 @@
 
                 if (inferred) {
                     this.processChat(false);
-                    H.Toast.show(`Detected ${inferred} from "${file.name}" and processed the log.`,
-                        { title: 'Log imported', duration: 5000 });
+                    H.Toast.show(`Detected ${inferred} from "${file.name}" and processed the log.`, 'Log imported', '', 5000);
                 } else {
                     H.Toast.show(`Loaded "${file.name}". Pick a gamemode, then Process Chat. ` +
-                        `(Couldn't detect the gamemode from the filename.)`,
-                        { title: 'Log loaded', type: 'warning', duration: 7000 });
+                        `(Couldn't detect the gamemode from the filename.)`, 'Log loaded', 'warning', 7000);
                     this.switchTab('scorer');
                 }
             };
@@ -388,14 +382,14 @@
                 if (!name) return;
                 const settings = await bridge.presets.read(name);
                 if (!settings) {
-                    H.Toast.show(`Could not read preset "${name}".`, { title: 'Presets', type: 'warning' });
+                    H.Toast.show(`Could not read preset "${name}".`, 'Presets', 'warning');
                     return;
                 }
                 this.points.importSettings(settings);
                 this.updateGamemodeDropdowns();
                 this.settingsView.renderAll();
                 this.state.addLog(`Loaded settings preset "${name}"`, 'success');
-                H.Toast.show(`Preset "${name}" loaded.`, { title: 'Presets', duration: 3500 });
+                H.Toast.show(`Preset "${name}" loaded.`, 'Presets', '', 3500);
             });
 
             this.on('savePreset', 'click', async () => {
@@ -407,9 +401,9 @@
                 if (res.ok) {
                     await this.refreshPresetList(res.name);
                     this.state.addLog(`Saved settings preset "${res.name}"`, 'success');
-                    H.Toast.show(`Preset "${res.name}" saved.`, { title: 'Presets', duration: 3500 });
+                    H.Toast.show(`Preset "${res.name}" saved.`, 'Presets', '', 3500);
                 } else {
-                    H.Toast.show('Could not save the preset.', { title: 'Presets', type: 'warning' });
+                    H.Toast.show('Could not save the preset.', 'Presets', 'warning');
                 }
             });
 
@@ -422,7 +416,7 @@
                     await this.refreshPresetList();
                     this.state.addLog(`Deleted settings preset "${name}"`, 'warning');
                 } else {
-                    H.Toast.show('Only user-saved presets can be deleted.', { title: 'Presets', type: 'warning' });
+                    H.Toast.show('Only user-saved presets can be deleted.', 'Presets', 'warning');
                 }
             });
 
@@ -482,8 +476,7 @@
             this.updateUI();
 
             if (hadGame) {
-                H.Toast.show('Previous game saved to history. Remember to Save JSON to keep tournament progress.',
-                    { title: 'New game started', type: 'warning', duration: 6000 });
+                H.Toast.show('Previous game saved to history. Remember to Save JSON to keep tournament progress.', 'New game started', 'warning', 6000);
             }
         }
 
@@ -626,11 +619,11 @@
          */
         addSubstitution(subName, originalPlayer) {
             if (this.state.findPlayerTeam(subName) && !this.state.substitutions[subName]) {
-                H.Toast.show(`${subName} is already on a team roster.`, { title: 'Cannot add sub', type: 'warning' });
+                H.Toast.show(`${subName} is already on a team roster.`, 'Cannot add sub', 'warning');
                 return;
             }
             if (subName === originalPlayer) {
-                H.Toast.show('A player cannot substitute for themselves.', { title: 'Cannot add sub', type: 'warning' });
+                H.Toast.show('A player cannot substitute for themselves.', 'Cannot add sub', 'warning');
                 return;
             }
             this.state.pushUndo('addSubstitution');
@@ -839,7 +832,7 @@
                 </div>`).join('') : '<p class="empty-state">No completed games for this player yet.</p>';
 
             bodyEl.innerHTML = summary + '<h3 style="margin:8px 0 10px;">Per-Game Breakdown</h3>' + games;
-            document.getElementById('playerModal').classList.add('open');
+            this.statsView.openModal('playerModal');
         }
 
         /**
@@ -849,11 +842,9 @@
          */
         closeModal(id) {
             const m = document.getElementById(id);
-
-            if (m) {
-                m.classList.remove('open');
-                m.setAttribute('aria-hidden', 'true');
-            }
+            if (!m) return;
+            m.classList.remove('open');
+            m.setAttribute('aria-hidden', 'true');
         }
 
         /**
@@ -862,7 +853,7 @@
          */
         openExportModal() {
             if (this.state.gameHistory.length === 0) {
-                H.Toast.show('No completed games to export yet.', { title: 'Nothing to export', type: 'warning' });
+                H.Toast.show('No completed games to export yet.', 'Nothing to export', 'warning');
                 return;
             }
             const titleInput = document.getElementById('exportEventTitle');
@@ -879,7 +870,7 @@
                         <span class="export-team-pts">${t.points} pts</span>
                     </div>`).join('');
             }
-            document.getElementById('exportModal').classList.add('open');
+            this.statsView.openModal('exportModal');
         }
 
         /**
@@ -921,7 +912,7 @@
             this.state.addLog('Statistics wiped (teams kept)', 'warning');
             this.statsView.renderAll();
             this.updateUI();
-            H.Toast.show('All statistics wiped. Teams were kept.', { title: 'Statistics cleared', type: 'warning', duration: 5000 });
+            H.Toast.show('All statistics wiped. Teams were kept.', 'Statistics cleared', 'warning', 5000);
         }
 
         /**
@@ -1031,13 +1022,13 @@
          */
         loadJsonText(text) {
             try {
-                this.state.applyData(JSON.parse(text), { includeTeams: true });
+                this.state.applyData(JSON.parse(text), true);
                 this.state.syncToStorage();
                 this.applySavedGamemodeSelection();
                 this.updateUI();
                 this.teamsView.render();
                 this.statsView.renderAll();
-                H.Toast.show('Tournament data loaded.', { title: 'Loaded', duration: 4000 });
+                H.Toast.show('Tournament data loaded.', 'Loaded', '', 4000);
                 this.state.addLog('Data imported from JSON file', 'success');
             } catch (err) {
                 alert('Error loading data: Invalid JSON file format');
@@ -1059,9 +1050,9 @@
             if (bridge && bridge.saveJson) {
                 bridge.saveJson(filename, text).then(res => {
                     if (res.ok) {
-                        H.Toast.show(`Saved to ${res.path}`, { title: 'Saved', duration: 6000 });
+                        H.Toast.show(`Saved to ${res.path}`, 'Saved', '', 6000);
                     } else {
-                        H.Toast.show('Could not write the save file.', { title: 'Save failed', type: 'warning' });
+                        H.Toast.show('Could not write the save file.', 'Save failed', 'warning');
                     }
                 });
                 return;
@@ -1097,23 +1088,16 @@
         }
 
         /**
-         * Normalise a gamemode name for comparison.
-         * @param {string} g Gamemode name.
-         * @returns {string} Normalised name.
-         */
-        normalize(g) { return g ? String(g).replace(/\s+/g, '').toLowerCase() : ''; }
-
-        /**
          * Select the saved gamemode in both dropdowns.
          * @returns {void}
          */
         applySavedGamemodeSelection() {
             if (!this.state.gamemode) return;
-            const norm = this.normalize(this.state.gamemode);
+            const norm = H.ChatUtils.normalizeMode(this.state.gamemode);
             for (const id of ['gamemode', 'settingsGamemode']) {
                 const sel = document.getElementById(id);
                 if (!sel) continue;
-                const match = Array.from(sel.options).find(o => this.normalize(o.value) === norm);
+                const match = Array.from(sel.options).find(o => o.value && H.ChatUtils.normalizeMode(o.value) === norm);
                 if (match) { sel.value = match.value; if (id === 'gamemode') this.state.gamemode = match.value; }
             }
         }

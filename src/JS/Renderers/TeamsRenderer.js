@@ -8,6 +8,7 @@
 
     class TeamsRenderer extends Base {
         /**
+         * Create the Teams tab renderer.
          * @param {HiveEventScorer} app App controller.
          */
         constructor(app) {

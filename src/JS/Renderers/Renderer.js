@@ -6,6 +6,7 @@
 
     class Renderer {
         /**
+         * Create a renderer bound to the app controller.
          * @param {HiveEventScorer} app App controller.
          */
         constructor(app) {
@@ -16,14 +17,17 @@
         }
 
         /**
-         * Escape text for safe HTML interpolation.
+         * Escape text for safe HTML and attribute interpolation.
          * @param {*} text Value to escape.
          * @returns {string} Escaped HTML.
          */
         escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text == null ? '' : String(text);
-            return div.innerHTML;
+            return String(text == null ? '' : text)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
 
         /**
@@ -31,7 +35,21 @@
          * @param {string} id Element id.
          * @returns {HTMLElement|null} The element.
          */
-        $(id) { return document.getElementById(id); }
+        $(id) {
+            return document.getElementById(id);
+        }
+
+        /**
+         * Show a modal dialog.
+         * @param {string} id Modal element id.
+         * @returns {void}
+         */
+        openModal(id) {
+            const m = this.$(id);
+            if (!m) return;
+            m.classList.add('open');
+            m.setAttribute('aria-hidden', 'false');
+        }
 
         /**
          * Count up/down to a new value for the quick-stat cards.
