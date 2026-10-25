@@ -8,10 +8,11 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('hiveDesktop', {
     /**
-     * Start tailing msglog.txt from its current end.
+     * Start tailing the chat log from its current end.
+     * @param {string} customPath Chosen log file, or '' to auto-detect.
      * @returns {Promise<{ok: boolean, path: string}>} Result with the resolved log path.
      */
-    startCapture: () => ipcRenderer.invoke('live-capture-start'),
+    startCapture: customPath => ipcRenderer.invoke('live-capture-start', customPath),
 
     /**
      * Stop tailing.
@@ -20,10 +21,17 @@ contextBridge.exposeInMainWorld('hiveDesktop', {
     stopCapture: () => ipcRenderer.invoke('live-capture-stop'),
 
     /**
-     * Resolve the msglog path without starting capture.
-     * @returns {Promise<string>} Absolute path to msglog.txt.
+     * Resolve the chat log path without starting capture.
+     * @param {string} customPath Chosen log file, or '' to auto-detect.
+     * @returns {Promise<string>} Absolute path to the chat log.
      */
-    getLogPath: () => ipcRenderer.invoke('live-capture-path'),
+    getLogPath: customPath => ipcRenderer.invoke('live-capture-path', customPath),
+
+    /**
+     * Pick a chat log file with a native file dialog.
+     * @returns {Promise<string>} Chosen path, or '' when canceled.
+     */
+    browseLogFile: () => ipcRenderer.invoke('live-capture-browse'),
 
     /**
      * Subscribe to newly appended log lines.

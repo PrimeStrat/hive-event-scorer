@@ -83,12 +83,29 @@ class AppFiles {
     }
 
     /**
-     * Resolve the msglog path for the current user (HIVE_MSGLOG overrides).
-     * @returns {string} Absolute path to msglog.txt.
+     * Known chat log files, most recommended first.
+     * @returns {Array<{name: string, file: string}>} Client name and log path.
      */
-    static msglogPath() {
+    static logCandidates() {
+        const local = process.env.LOCALAPPDATA || '';
+        return [
+            { name: 'Prime Launcher', file: path.join(local, 'Prime Launcher', 'Logs', 'ChatLog.txt') },
+            { name: 'OderSo', file: path.join(local, 'OderSoClient', 'msglog.txt') }
+        ];
+    }
+
+    /**
+     * Resolve the chat log to tail: HIVE_MSGLOG, then the chosen file, then the
+     * first known client log that exists, then the Prime Launcher log.
+     * @param {string} customPath File chosen in Settings, or ''.
+     * @returns {string} Absolute path to the chat log.
+     */
+    static msglogPath(customPath) {
         if (process.env.HIVE_MSGLOG) return process.env.HIVE_MSGLOG;
-        return path.join(process.env.LOCALAPPDATA || '', 'OderSoClient', 'msglog.txt');
+        if (customPath) return customPath;
+        const candidates = AppFiles.logCandidates();
+        const found = candidates.find(c => fs.existsSync(c.file));
+        return (found || candidates[0]).file;
     }
 }
 
@@ -213,6 +230,10 @@ class MainApp {
                 nodeIntegration: false
             }
         });
+        MainApp.mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+            if (/^https:\/\//.test(url)) shell.openExternal(url);
+            return { action: 'deny' };
+        });
         MainApp.mainWindow.loadFile(path.join(__dirname, 'Main.html'));
         MainApp.mainWindow.on('closed', () => {
             MainApp.stopWatcher();
@@ -233,11 +254,12 @@ class MainApp {
 
     /**
      * Start tailing the chat log and forward new lines to the window.
+     * @param {string} customPath File chosen in Settings, or '' to auto-detect.
      * @returns {{ok: boolean, path: string}} Result with the resolved log path.
      */
-    static startCapture() {
+    static startCapture(customPath) {
         MainApp.stopWatcher();
-        const logPath = AppFiles.msglogPath();
+        const logPath = AppFiles.msglogPath(customPath);
         MainApp.watcher = new LogWatcher(logPath, lines => {
             if (MainApp.mainWindow && !MainApp.mainWindow.isDestroyed()) {
                 MainApp.mainWindow.webContents.send('live-lines', lines);
@@ -246,6 +268,20 @@ class MainApp {
         const ok = MainApp.watcher.start();
         if (!ok) MainApp.watcher = null;
         return { ok, path: logPath };
+    }
+
+    /**
+     * Let the user pick a chat log file from any client.
+     * @returns {Promise<string>} Chosen path, or '' when canceled.
+     */
+    static async browseLogFile() {
+        const res = await dialog.showOpenDialog(MainApp.mainWindow, {
+            title: 'Choose a chat log file',
+            defaultPath: process.env.LOCALAPPDATA || app.getPath('home'),
+            filters: [{ name: 'Log files', extensions: ['txt', 'log'] }, { name: 'All files', extensions: ['*'] }],
+            properties: ['openFile']
+        });
+        return res.canceled || res.filePaths.length === 0 ? '' : res.filePaths[0];
     }
 
     /**
@@ -422,9 +458,10 @@ class MainApp {
     }
 }
 
-ipcMain.handle('live-capture-start', () => MainApp.startCapture());
+ipcMain.handle('live-capture-start', (event, customPath) => MainApp.startCapture(String(customPath || '')));
 ipcMain.handle('live-capture-stop', () => MainApp.stopCapture());
-ipcMain.handle('live-capture-path', () => AppFiles.msglogPath());
+ipcMain.handle('live-capture-path', (event, customPath) => AppFiles.msglogPath(String(customPath || '')));
+ipcMain.handle('live-capture-browse', () => MainApp.browseLogFile());
 ipcMain.handle('presets-list', () => MainApp.listPresets());
 ipcMain.handle('presets-read', (event, name) => MainApp.readPreset(name));
 ipcMain.handle('presets-save', (event, name, settings) => MainApp.savePreset(name, settings));

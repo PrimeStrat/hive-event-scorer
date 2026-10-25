@@ -352,6 +352,22 @@
                             or "You finished in 1st place". Leave blank to skip "You" lines.</span>
                     </div>
 
+                    <div id="liveLogSection" class="pattern-group hidden">
+                        <label for="liveLogPath">Live capture chat log:</label>
+                        <div class="preset-controls">
+                            <input type="text" id="liveLogPath" class="pattern-input" placeholder="Auto-detect (Prime Launcher, then OderSo)">
+                            <div class="btn-group">
+                                <button type="button" id="browseLiveLog" class="btn btn-secondary btn-small">Browse</button>
+                                <button type="button" id="clearLiveLog" class="btn btn-secondary btn-small">Auto</button>
+                            </div>
+                        </div>
+                        <span class="pattern-help">Recommended: <a href="https://primestrat.dev/works/prime-launcher" target="_blank" rel="noopener">Prime Launcher</a>.
+                            Turn on its Chat log feature and the log is found automatically. The OderSo client log is also
+                            found automatically. Flarial or any other client that saves chat to a file works too: use Browse
+                            to pick its log file.</span>
+                        <span class="pattern-help" id="liveLogResolved"></span>
+                    </div>
+
                     <div class="pattern-group">
                         <label class="checkbox-label" for="autoAddUnknownPlayers">
                             <input type="checkbox" id="autoAddUnknownPlayers" checked>

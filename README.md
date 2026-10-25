@@ -8,7 +8,7 @@ Made by Prime Software Development (PrimeStrat). Not affiliated with The Hive.
 ## Features
 - Team and substitute management
 - Automatic scoring from chat logs
-- Live capture from the OderSo client chat log
+- Live capture from your client's chat log (Prime Launcher recommended)
 - Event totals, per-player breakdowns and game history
 - Score editor for finished games
 - Custom point values, presets and gamemodes
@@ -24,6 +24,19 @@ Made by Prime Software Development (PrimeStrat). Not affiliated with The Hive.
 
 Set **My IGN** in Settings so lines like "You killed ..." or "You finished in 1st place" count for you.
 Leave it blank to skip those lines.
+
+## Live capture
+Live capture reads your game's chat log while you play and scores each line as it comes in.
+
+We recommend [Prime Launcher](https://primestrat.dev/works/prime-launcher).
+Turn on its **Chat log** feature in the in-game client, and the scorer finds the log on its own.
+
+Other clients work too:
+- **OderSo** - its chat log is also found on its own.
+- **Flarial**, or any client that saves chat to a file - open **Settings**, press **Browse** under
+  "Live capture chat log", and pick the log file.
+
+Settings shows which file live capture will read. Press **Auto** to go back to finding it on its own.
 
 ## Supported gamemodes
 BedWars, SkyWars, Survival Games, DeathRun, Gravity, Block Drop and Block Party.

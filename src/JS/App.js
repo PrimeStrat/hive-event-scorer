@@ -5,6 +5,7 @@
     'use strict';
     const H = global.Hive;
     const MODAL_IDS = ['playerModal', 'teamPointsModal', 'exportModal'];
+    const LIVE_LOG_KEY = 'hive_live_log_path';
 
     class HiveEventScorer {
         /**
@@ -156,15 +157,53 @@
                     H.Toast.show('Select a gamemode before turning on live capture.', 'Live capture', 'warning', 5000);
                     return;
                 }
-                const res = await bridge.startCapture();
+                const res = await bridge.startCapture(this.liveLogPath());
                 if (!res.ok) {
-                    H.Toast.show(`Could not open the chat log at ${res.path}. Is the client installed?`, 'Live capture', 'warning', 7000);
+                    H.Toast.show(`Could not open the chat log at ${res.path}. Turn on the Prime Launcher Chat log, or pick your client's log in Settings.`, 'Live capture', 'warning', 8000);
                     return;
                 }
                 this.state.pushUndo('liveCapture');
                 this.setLiveCaptureState(true);
                 this.state.addLog(`Live capture started (${res.path})`, 'success');
             });
+            this.setupLiveLogSetting(bridge);
+        }
+
+        /**
+         * Chat log file chosen in Settings, or '' to auto-detect.
+         * @returns {string} Log path or ''.
+         */
+        liveLogPath() {
+            return H.Storage.getItem(LIVE_LOG_KEY) || '';
+        }
+
+        /**
+         * Wire the Settings chat log picker and show which file will be read.
+         * @param {Object} bridge Desktop bridge.
+         * @returns {void}
+         */
+        setupLiveLogSetting(bridge) {
+            const section = document.getElementById('liveLogSection');
+            const input = document.getElementById('liveLogPath');
+            if (!section || !input) return;
+            section.classList.remove('hidden');
+            input.value = this.liveLogPath();
+
+            const apply = async value => {
+                const trimmed = value.trim();
+                if (trimmed) H.Storage.setItem(LIVE_LOG_KEY, trimmed);
+                else H.Storage.removeItem(LIVE_LOG_KEY);
+                input.value = trimmed;
+                const resolved = document.getElementById('liveLogResolved');
+                if (resolved) resolved.textContent = `Live capture reads: ${await bridge.getLogPath(trimmed)}`;
+            };
+            input.addEventListener('change', () => apply(input.value));
+            this.on('browseLiveLog', 'click', async () => {
+                const chosen = await bridge.browseLogFile();
+                if (chosen) apply(chosen);
+            });
+            this.on('clearLiveLog', 'click', () => apply(''));
+            apply(input.value);
         }
 
         /**
