@@ -9,6 +9,7 @@ const path = require('path');
 
 const POLL_MS = 500;
 const NEWLINE = 0x0A;
+const EXPORT_DIR_KEY = 'hive_export_dir';
 
 /**
  * File system locations and name sanitizing for app data, presets and the chat log.
@@ -63,7 +64,21 @@ class AppFiles {
      * @returns {string} Absolute path.
      */
     static userPresetsDir() {
-        return path.join(app.getPath('userData'), 'presets');
+        return path.join(AppFiles.dataDir(), 'Presets');
+    }
+
+    /**
+     * Copy presets from the old folder without replacing newer ones.
+     * @returns {void}
+     */
+    static migratePresets() {
+        const oldDir = path.join(app.getPath('userData'), 'presets');
+        if (!fs.existsSync(oldDir)) return;
+        try {
+            fs.cpSync(oldDir, AppFiles.userPresetsDir(), { recursive: true, force: false });
+        } catch (err) {
+            console.error('Could not move saved presets:', err);
+        }
     }
 
     /**
@@ -443,14 +458,17 @@ class MainApp {
      * @returns {Promise<{ok: boolean, path: string, canceled: boolean}>} Result.
      */
     static async saveImage(filename, bytes) {
+        const lastDir = MainApp.storageGet(EXPORT_DIR_KEY);
+        const startDir = lastDir && fs.existsSync(lastDir) ? lastDir : app.getPath('pictures');
         const res = await dialog.showSaveDialog(MainApp.mainWindow, {
             title: 'Save poster',
-            defaultPath: path.join(app.getPath('pictures'), AppFiles.safeFileName(filename) || 'poster.png'),
+            defaultPath: path.join(startDir, AppFiles.safeFileName(filename) || 'poster.png'),
             filters: [{ name: 'PNG Image', extensions: ['png'] }]
         });
         if (res.canceled || !res.filePath) return { ok: false, canceled: true };
         try {
             fs.writeFileSync(res.filePath, Buffer.from(bytes));
+            MainApp.storageSet(EXPORT_DIR_KEY, path.dirname(res.filePath));
             return { ok: true, path: res.filePath };
         } catch (err) {
             return { ok: false };
@@ -481,6 +499,7 @@ ipcMain.handle('save-image', (event, filename, bytes) => MainApp.saveImage(filen
 ipcMain.handle('open-data-folder', () => MainApp.openFolder(AppFiles.dataDir()));
 
 app.whenReady().then(() => {
+    AppFiles.migratePresets();
     MainApp.createWindow();
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) MainApp.createWindow();
