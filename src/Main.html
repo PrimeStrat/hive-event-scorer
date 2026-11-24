@@ -228,6 +228,7 @@
                 <div class="section">
                     <div class="section-header">
                         <h2 class="section-title">Game History</h2>
+                        <button type="button" id="clearHistory" class="btn btn-danger">Clear History</button>
                     </div>
                     <p class="help-text">All completed games with scores and player performance. Use "Edit Scores" to
                         manually adjust a team's total for a game.</p>
@@ -269,15 +270,27 @@
                         <input type="text" id="exportEventTitle" placeholder="e.g. The Best Event Ever!">
                     </div>
                     <p class="help-text">Edit team display names below if you want different labels on the poster.
-                        These overrides apply to the exported image only - they don't change your teams.</p>
+                        These names are remembered until you clear them. They do not change your teams.</p>
                     <div id="exportTeamNames" class="export-team-names"></div>
                     <div class="input-actions">
                         <button type="button" id="exportDoWinners" class="btn btn-primary">Download Winners PNG</button>
                         <button type="button" id="exportDoPlayers" class="btn btn-info">Download Players PNG</button>
+                        <button type="button" id="clearExportNames" class="btn btn-secondary">Clear Team Names</button>
                     </div>
                 </div>
             </div>
         </div>
+
+        <dialog id="appDialog" class="app-dialog" aria-labelledby="appDialogMessage">
+            <form method="dialog">
+                <p id="appDialogMessage"></p>
+                <input type="text" id="appDialogInput" class="hidden" maxlength="60" aria-labelledby="appDialogMessage">
+                <div class="input-actions">
+                    <button type="submit" id="appDialogOk" value="ok" class="btn btn-primary">OK</button>
+                    <button type="submit" value="cancel" formnovalidate class="btn btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </dialog>
 
         <div id="settings" class="tab-content">
             <div class="settings-container settings-columns">
@@ -423,20 +436,17 @@
 
                     <div id="presetsSection" class="presets-section hidden">
                         <h3>Presets</h3>
-                        <p class="help-text">Load a bundled or saved settings preset, or save the current settings as
-                            a new preset.</p>
-                        <div class="preset-controls">
-                            <select id="presetSelect" aria-label="Settings preset">
-                                <option value="">-- Choose a preset --</option>
-                            </select>
-                            <div class="btn-group">
-                                <button type="button" id="loadPreset" class="btn btn-primary btn-small">Load</button>
-                                <button type="button" id="savePreset" class="btn btn-success btn-small">Save As</button>
-                                <button type="button" id="deletePreset" class="btn btn-danger btn-small">Delete</button>
-                                <button type="button" id="openPresetsFolder" class="btn btn-secondary btn-small">Open
-                                    Folder</button>
-                            </div>
+                        <p class="help-text">Load a preset to replace your point values and toggles. Your IGN stays
+                            the same.</p>
+                        <div id="presetList" class="preset-list"></div>
+                        <div class="preset-save-row">
+                            <input type="text" id="presetName" maxlength="60" placeholder="New preset name"
+                                aria-label="New preset name">
+                            <button type="button" id="savePreset" class="btn btn-success btn-small">Save Current
+                                Settings</button>
                         </div>
+                        <button type="button" id="openPresetsFolder" class="btn btn-secondary btn-small">Open Presets
+                            Folder</button>
                     </div>
 
                     <div class="settings-actions">
@@ -477,6 +487,7 @@
     <script src="JS/Core/ChatUtils.js"></script>
     <script src="JS/Core/Storage.js"></script>
     <script src="JS/Core/Toast.js"></script>
+    <script src="JS/Core/Dialog.js"></script>
     <script src="JS/Core/FileImport.js"></script>
     <script src="JS/Core/PosterExport.js"></script>
     <script src="JS/Core/PointSystem.js"></script>

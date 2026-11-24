@@ -138,7 +138,7 @@
                 .map(([action, value]) => this.pointRow(action, value, ''))
                 .join('');
             let tieRow = '';
-            if (mode === 'Block Party') tieRow = this.tieModeRow('blockPartyTieMode', 'Tie Handling');
+            if (mode === 'Block Party' || mode === 'BlockDrop') tieRow = this.tieModeRow('blockPartyTieMode', 'Tie Handling');
             else if (features.pvp) tieRow = this.tieModeRow('pvpTeamTieMode', 'Team Tie Handling');
 
             host.innerHTML = `<h3>Point Values for ${this.escapeHtml(mode)}</h3>` + otherRows + tieRow +
@@ -219,6 +219,28 @@
                 const el = this.$(id);
                 if (el) this.points[id] = el.value;
             }
+        }
+
+        /**
+         * Render the preset list.
+         * @param {Array<{name: string, source: string}>} presets Available presets.
+         * @param {string} lastLoaded Name of the last loaded preset, or ''.
+         * @returns {void}
+         */
+        renderPresets(presets, lastLoaded) {
+            const host = this.$('presetList');
+            if (!host) return;
+            host.innerHTML = presets.map(p => {
+                const name = this.escapeHtml(p.name);
+                const isLast = p.name === lastLoaded;
+                return `
+                    <div class="preset-row ${isLast ? 'active' : ''}">
+                        <span class="preset-row-name">${name}</span>
+                        <span class="preset-row-tag">${isLast ? 'Last loaded - ' : ''}${p.source === 'bundled' ? 'Built-in' : 'Saved'}</span>
+                        <button type="button" class="btn btn-primary btn-small" data-preset-action="load" data-preset="${name}">Load</button>
+                        ${p.source === 'user' ? `<button type="button" class="btn btn-danger btn-small" data-preset-action="delete" data-preset="${name}">Delete</button>` : ''}
+                    </div>`;
+            }).join('') || '<p class="empty-state">No presets yet.</p>';
         }
 
         /**

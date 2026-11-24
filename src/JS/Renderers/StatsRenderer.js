@@ -322,7 +322,10 @@
                                 <button type="button" class="btn btn-success btn-small" data-action="save-game-scores" data-game-id="${game.id}">Save Scores</button>
                                 <button type="button" class="btn btn-secondary btn-small" data-action="cancel-game-scores" data-game-id="${game.id}">Cancel</button>
                             </div>` : `
-                            <button type="button" class="btn btn-info btn-small" data-action="edit-game-scores" data-game-id="${game.id}">Edit Scores</button>`}
+                            <div class="game-score-editor-actions">
+                                <button type="button" class="btn btn-info btn-small" data-action="edit-game-scores" data-game-id="${game.id}">Edit Scores</button>
+                                <button type="button" class="btn btn-danger btn-small" data-action="delete-game" data-game-id="${game.id}">Delete Game</button>
+                            </div>`}
                         </div>
                         ${editing ? '<p class="game-score-editor-help">Adjust the saved score for any team. Totals refresh on save.</p>' : ''}
                         ${teams.map(([teamName, data], i) => `

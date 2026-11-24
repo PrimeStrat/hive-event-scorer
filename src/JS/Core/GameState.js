@@ -216,6 +216,15 @@
         }
 
         /**
+         * True when the current game has recorded anything worth keeping.
+         * @returns {boolean} Whether the game has stats or score events.
+         */
+        hasGameActivity() {
+            return Object.keys(this.playerStats).length > 0 ||
+                Object.values(this.scores).some(s => s.events.length > 0);
+        }
+
+        /**
          * Deep-copy the undoable state.
          * @param {string} action Label for the snapshot.
          * @returns {Object} Snapshot.
@@ -295,7 +304,7 @@
          * @returns {boolean} False when there is nothing to save.
          */
         saveGameToHistory() {
-            if (!this.currentGame || !this.hasActiveScores()) return false;
+            if (!this.currentGame || !this.hasGameActivity()) return false;
             this.currentGame.endTime = new Date().toISOString();
             const record = {
                 id: this.currentGame.id,
@@ -442,6 +451,25 @@
                 store.removeItem('hive_event_data');
                 store.removeItem('hive_emergency_backup');
             }
+        }
+
+        /**
+         * Remove games from history; removing the current game also resets the board.
+         * @param {Array<string|number>} gameIds Ids of the games to remove.
+         * @returns {void}
+         */
+        removeFromHistory(gameIds) {
+            const remove = new Set(gameIds.map(String));
+            this.gameHistory = this.gameHistory.filter(g => !remove.has(String(g.id)));
+            this.editingGameId = null;
+            if (!this.currentGame || !remove.has(String(this.currentGame.id))) return;
+            if (this.gamemode) {
+                this.startNewGame(this.gamemode);
+                return;
+            }
+            this.currentGame = null;
+            this.scores = {};
+            this.playerStats = {};
         }
 
         /**

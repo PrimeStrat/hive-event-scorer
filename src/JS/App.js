@@ -4,8 +4,10 @@
 (function (global) {
     'use strict';
     const H = global.Hive;
-    const MODAL_IDS = ['playerModal', 'teamPointsModal', 'exportModal'];
+    const DISMISSIBLE_MODAL_IDS = ['playerModal', 'teamPointsModal'];
     const LIVE_LOG_KEY = 'hive_live_log_path';
+    const EXPORT_LABELS_KEY = 'hive_export_labels';
+    const LAST_PRESET_KEY = 'hive_last_preset';
 
     class HiveEventScorer {
         /**
@@ -57,8 +59,8 @@
             this.points.importSettings(settings);
             this.updateGamemodeDropdowns();
             this.settingsView.renderAll();
-            const sel = document.getElementById('presetSelect');
-            if (sel) sel.value = 'HiveSilly';
+            H.Storage.setItem(LAST_PRESET_KEY, 'HiveSilly');
+            await this.refreshPresetList();
             this.state.addLog('Loaded default settings preset "HiveSilly"', 'info');
         }
 
@@ -81,9 +83,10 @@
             this.on('processSingleLine', 'click', () => this.processChat(true));
             this.on('clearInput', 'click', () => { const t = document.getElementById('chatInput'); if (t) t.value = ''; });
 
-            this.on('resetScores', 'click', () => {
-                if (confirm('Reset all scores for this game?')) {
+            this.on('resetScores', 'click', async () => {
+                if (await H.Dialog.confirm('Reset all scores for this game?', 'Reset')) {
                     this.state.pushUndo('resetScores');
+                    if (this.state.currentGame) delete this.state.currentGame.teamsFinalized;
                     this.state.scores = {};
                     this.state.eliminationOrder = [];
                     this.state.playerEliminationOrder = [];
@@ -113,18 +116,23 @@
             this.on('exportDoWinners', 'click', () => this.generatePoster('winners'));
             this.on('exportDoPlayers', 'click', () => this.generatePoster('players'));
             this.on('exportModalClose', 'click', () => this.closeModal('exportModal'));
+            this.on('clearExportNames', 'click', () => this.clearExportLabels());
+            this.on('exportTeamNames', 'input', () => this.saveExportLabels());
             this.on('wipeStats', 'click', () => this.wipeStatistics());
+            this.on('clearHistory', 'click', () => this.clearHistory());
 
             this.on('playerModalClose', 'click', () => this.closeModal('playerModal'));
             this.on('teamPointsModalClose', 'click', () => this.closeModal('teamPointsModal'));
-            MODAL_IDS.forEach(id => {
+            DISMISSIBLE_MODAL_IDS.forEach(id => {
                 const m = document.getElementById(id);
                 if (m) m.addEventListener('click', e => {
                     if (e.target === m) this.closeModal(id);
                 });
             });
             document.addEventListener('keydown', e => {
-                if (e.key === 'Escape') MODAL_IDS.forEach(id => this.closeModal(id));
+                if (e.key === 'Escape' && !document.querySelector('dialog[open]')) {
+                    DISMISSIBLE_MODAL_IDS.forEach(id => this.closeModal(id));
+                }
             });
 
             this.setupTeamManagement();
@@ -221,7 +229,7 @@
         }
 
         /**
-         * Append newly captured log lines to the chat input and score them.
+         * Score newly captured log lines; lines with no event leave the UI alone.
          * @param {string[]} lines Newly appended complete log lines.
          * @returns {void}
          */
@@ -230,14 +238,9 @@
             const parser = this.engine.parserFor(this.state.gamemode);
             if (!parser) return;
 
-            const input = document.getElementById('chatInput');
-            if (input) {
-                input.value = (input.value ? input.value + '\n' : '') + lines.join('\n');
-                input.scrollTop = input.scrollHeight;
-            }
-
             let processed = 0;
             for (const line of lines) { if (parser.parseLine(line)) processed++; }
+            if (processed === 0 && !this.state.currentGameCompleted) return;
             if (processed > 0) this.state.addLog(`Live: scored ${processed} event(s)`, 'info');
 
             if (this.state.currentGameCompleted && this.state.currentGame && this.state.hasActiveScores()) {
@@ -349,8 +352,8 @@
             this.on('addPlayer', 'click', () => this.addPlayerToTeam(false));
             this.on('playerName', 'keypress', e => { if (e.key === 'Enter') this.addPlayerToTeam(false); });
             this.on('addBulkPlayers', 'click', () => this.addPlayerToTeam(true));
-            this.on('clearAllPlayers', 'click', () => {
-                if (confirm('Remove all players from all teams? This can be undone.')) this.clearAllPlayers();
+            this.on('clearAllPlayers', 'click', async () => {
+                if (await H.Dialog.confirm('Remove all players from all teams? This can be undone.', 'Remove')) this.clearAllPlayers();
             });
         }
 
@@ -392,10 +395,11 @@
                 this.settingsView.renderPoints();
                 this.state.addLog(`Mystery Chest points ${e.target.checked ? 'enabled' : 'disabled'}`, 'info');
             });
-            this.on('resetSettings', 'click', () => {
-                if (confirm('Reset all settings to defaults? This cannot be undone.')) {
+            this.on('resetSettings', 'click', async () => {
+                if (await H.Dialog.confirm('Reset all settings to defaults? This cannot be undone.', 'Reset')) {
                     this.points.reset(); this.updateGamemodeDropdowns(); this.settingsView.renderAll();
-                    alert('Settings reset to defaults!'); this.state.addLog('Settings reset', 'warning');
+                    H.Toast.show('Settings reset to defaults.', 'Settings', '', 3500);
+                    this.state.addLog('Settings reset', 'warning');
                 }
             });
             this.on('exportSettings', 'click', () => this.exportSettingsJSON());
@@ -416,67 +420,93 @@
             section.classList.remove('hidden');
             this.refreshPresetList();
 
-            this.on('loadPreset', 'click', async () => {
-                const name = (document.getElementById('presetSelect') || {}).value;
-                if (!name) return;
-                const settings = await bridge.presets.read(name);
-                if (!settings) {
-                    H.Toast.show(`Could not read preset "${name}".`, 'Presets', 'warning');
-                    return;
-                }
-                this.points.importSettings(settings);
-                this.updateGamemodeDropdowns();
-                this.settingsView.renderAll();
-                this.state.addLog(`Loaded settings preset "${name}"`, 'success');
-                H.Toast.show(`Preset "${name}" loaded.`, 'Presets', '', 3500);
+            this.on('presetList', 'click', e => {
+                const btn = e.target.closest('[data-preset-action]');
+                if (!btn) return;
+                if (btn.dataset.presetAction === 'load') this.loadPreset(btn.dataset.preset);
+                else this.deletePreset(btn.dataset.preset);
             });
-
-            this.on('savePreset', 'click', async () => {
-                const name = prompt('Preset name:');
-                if (!name || !name.trim()) return;
-                this.settingsView.collectFromDom();
-                this.points.save();
-                const res = await bridge.presets.save(name.trim(), this.points.exportSettings());
-                if (res.ok) {
-                    await this.refreshPresetList(res.name);
-                    this.state.addLog(`Saved settings preset "${res.name}"`, 'success');
-                    H.Toast.show(`Preset "${res.name}" saved.`, 'Presets', '', 3500);
-                } else {
-                    H.Toast.show('Could not save the preset.', 'Presets', 'warning');
-                }
+            this.on('savePreset', 'click', () => this.savePreset());
+            this.on('presetName', 'keydown', e => {
+                if (e.key === 'Enter') this.savePreset();
             });
-
-            this.on('deletePreset', 'click', async () => {
-                const name = (document.getElementById('presetSelect') || {}).value;
-                if (!name) return;
-                if (!confirm(`Delete preset "${name}"? Bundled presets cannot be deleted.`)) return;
-                const res = await bridge.presets.remove(name);
-                if (res.ok) {
-                    await this.refreshPresetList();
-                    this.state.addLog(`Deleted settings preset "${name}"`, 'warning');
-                } else {
-                    H.Toast.show('Only user-saved presets can be deleted.', 'Presets', 'warning');
-                }
-            });
-
             this.on('openPresetsFolder', 'click', () => bridge.presets.openFolder());
         }
 
         /**
-         * Repopulate the preset dropdown.
-         * @param {string} selectName Preset to select after refresh.
-         * @returns {Promise<void>} Resolves when repopulated.
+         * Apply a preset to the current settings.
+         * @param {string} name Preset name.
+         * @returns {Promise<void>} Resolves when applied.
          */
-        async refreshPresetList(selectName) {
+        async loadPreset(name) {
+            const settings = await global.hiveDesktop.presets.read(name);
+            if (!settings) {
+                H.Toast.show(`Could not read preset "${name}".`, 'Presets', 'warning');
+                return;
+            }
+            this.points.importSettings(settings);
+            H.Storage.setItem(LAST_PRESET_KEY, name);
+            this.updateGamemodeDropdowns();
+            this.settingsView.renderAll();
+            await this.refreshPresetList();
+            this.state.addLog(`Loaded settings preset "${name}"`, 'success');
+            H.Toast.show(`Preset "${name}" loaded.`, 'Presets', '', 3500);
+        }
+
+        /**
+         * Save the current settings under the name in the preset box.
+         * @returns {Promise<void>} Resolves when saved or canceled.
+         */
+        async savePreset() {
             const bridge = global.hiveDesktop;
-            const sel = document.getElementById('presetSelect');
-            if (!bridge || !bridge.presets || !sel) return;
-            const presets = await bridge.presets.list();
-            const current = selectName || sel.value;
-            sel.innerHTML = '<option value="">-- Choose a preset --</option>' + presets.map(p =>
-                `<option value="${this.statsView.escapeHtml(p.name)}">${this.statsView.escapeHtml(p.name)}${p.source === 'bundled' ? ' (bundled)' : ''}</option>`
-            ).join('');
-            if (current) sel.value = current;
+            const input = document.getElementById('presetName');
+            const name = input.value.trim();
+            if (!name) {
+                H.Toast.show('Type a name for the new preset first.', 'Presets', 'warning');
+                input.focus();
+                return;
+            }
+            const existing = (await bridge.presets.list()).find(p => p.name === name && p.source === 'user');
+            if (existing && !await H.Dialog.confirm(`Replace your saved preset "${name}"?`, 'Replace')) return;
+            this.settingsView.collectFromDom();
+            this.points.save();
+            const res = await bridge.presets.save(name, this.points.exportSettings());
+            if (!res.ok) {
+                H.Toast.show('Could not save the preset.', 'Presets', 'warning');
+                return;
+            }
+            input.value = '';
+            H.Storage.setItem(LAST_PRESET_KEY, res.name);
+            await this.refreshPresetList();
+            this.state.addLog(`Saved settings preset "${res.name}"`, 'success');
+            H.Toast.show(`Preset "${res.name}" saved.`, 'Presets', '', 3500);
+        }
+
+        /**
+         * Delete one saved preset after asking.
+         * @param {string} name Preset name.
+         * @returns {Promise<void>} Resolves when deleted or canceled.
+         */
+        async deletePreset(name) {
+            if (!await H.Dialog.confirm(`Delete preset "${name}"? This cannot be undone.`, 'Delete')) return;
+            const res = await global.hiveDesktop.presets.remove(name);
+            if (!res.ok) {
+                H.Toast.show(`Could not delete preset "${name}".`, 'Presets', 'warning');
+                return;
+            }
+            if (H.Storage.getItem(LAST_PRESET_KEY) === name) H.Storage.removeItem(LAST_PRESET_KEY);
+            await this.refreshPresetList();
+            this.state.addLog(`Deleted settings preset "${name}"`, 'warning');
+        }
+
+        /**
+         * Redraw the preset list.
+         * @returns {Promise<void>} Resolves when redrawn.
+         */
+        async refreshPresetList() {
+            const bridge = global.hiveDesktop;
+            if (!bridge || !bridge.presets) return;
+            this.settingsView.renderPresets(await bridge.presets.list(), H.Storage.getItem(LAST_PRESET_KEY) || '');
         }
 
         /**
@@ -503,9 +533,9 @@
          * @returns {void}
          */
         startNewGame() {
-            if (!this.state.gamemode) { alert('Please select a gamemode first!'); return; }
+            if (!this.state.gamemode) { H.Toast.show('Please select a gamemode first!', '', 'warning'); return; }
 
-            const hadGame = this.state.currentGame && this.state.hasActiveScores();
+            const hadGame = this.state.currentGame && this.state.hasGameActivity();
             if (hadGame) this.saveGameToHistory();
 
             this.state.pushUndo('startNewGame');
@@ -525,13 +555,13 @@
          * @returns {void}
          */
         processChat(lastLineOnly) {
-            if (!this.state.gamemode) { alert('Please select a gamemode first!'); return; }
+            if (!this.state.gamemode) { H.Toast.show('Please select a gamemode first!', '', 'warning'); return; }
             const input = document.getElementById('chatInput');
             const raw = input ? input.value : '';
-            if (!raw.trim()) { alert('Please enter some chat text to process!'); return; }
+            if (!raw.trim()) { H.Toast.show('Please enter some chat text to process!', '', 'warning'); return; }
 
             const parser = this.engine.parserFor(this.state.gamemode);
-            if (!parser) { alert('No parser available for this gamemode.'); return; }
+            if (!parser) { H.Toast.show('No parser available for this gamemode.', '', 'warning'); return; }
 
             this.state.pushUndo('processChat');
 
@@ -570,16 +600,16 @@
          */
         addPlayerToTeam(bulk) {
             const teamName = (document.getElementById('teamSelect') || {}).value;
-            if (!teamName) { alert('Please select a team!'); return; }
+            if (!teamName) { H.Toast.show('Please select a team!', '', 'warning'); return; }
 
             let toAdd = [];
             if (bulk) {
                 const txt = (document.getElementById('bulkPlayerNames') || {}).value || '';
-                if (!txt.trim()) { alert('Please enter player names in the bulk input area!'); return; }
+                if (!txt.trim()) { H.Toast.show('Please enter player names in the bulk input area!', '', 'warning'); return; }
                 toAdd = txt.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
             } else {
                 const name = ((document.getElementById('playerName') || {}).value || '').trim();
-                if (!name) { alert('Please enter a player name!'); return; }
+                if (!name) { H.Toast.show('Please enter a player name!', '', 'warning'); return; }
                 toAdd = [name];
             }
 
@@ -709,7 +739,7 @@
         addManualBedBreak() {
             const sel = document.getElementById('bedBreakPlayer');
             const player = sel ? sel.value : '';
-            if (!player) { alert('Pick the player who broke the bed.'); return; }
+            if (!player) { H.Toast.show('Pick the player who broke the bed.', '', 'warning'); return; }
             const team = this.state.findPlayerTeam(player);
             if (!this.engine.isScorableTeam(team)) return;
             this.state.pushUndo('addBedBreak');
@@ -774,7 +804,7 @@
          */
         performUndo() {
             const action = this.state.undo();
-            if (!action) { alert('Nothing to undo!'); return; }
+            if (!action) { H.Toast.show('Nothing to undo!', '', 'warning'); return; }
             this.state.addLog(`Undo: ${action}`, 'info');
             this.state.saveTeams(); this.state.syncToStorage();
             this.teamsView.render(); this.updateUI();
@@ -786,7 +816,7 @@
          */
         performRedo() {
             const action = this.state.redo();
-            if (!action) { alert('Nothing to redo!'); return; }
+            if (!action) { H.Toast.show('Nothing to redo!', '', 'warning'); return; }
             this.state.addLog(`Redo: ${action}`, 'info');
             this.state.saveTeams(); this.state.syncToStorage();
             this.teamsView.render(); this.updateUI();
@@ -814,6 +844,47 @@
             if (action === 'edit-game-scores') { this.state.editingGameId = gameId; this.statsView.renderAll(); }
             else if (action === 'cancel-game-scores') { this.state.editingGameId = null; this.statsView.renderAll(); }
             else if (action === 'save-game-scores') this.saveEditedGameScores(gameId);
+            else if (action === 'delete-game') this.deleteGame(gameId);
+        }
+
+        /**
+         * Delete one game from history after asking.
+         * @param {string} gameId Game id.
+         * @returns {Promise<void>} Resolves when deleted or canceled.
+         */
+        async deleteGame(gameId) {
+            const game = this.state.gameHistory.find(g => String(g.id) === String(gameId));
+            if (!game || !await H.Dialog.confirm(`Delete this ${game.gamemode} game from history? Undo can bring it back.`, 'Delete')) return;
+            this.removeGames([gameId], 'deleteGame');
+        }
+
+        /**
+         * Delete every game from history after asking; teams are kept.
+         * @returns {Promise<void>} Resolves when cleared or canceled.
+         */
+        async clearHistory() {
+            const count = this.state.gameHistory.length;
+            if (count === 0) {
+                H.Toast.show('There are no games in history.', 'History', 'warning');
+                return;
+            }
+            if (!await H.Dialog.confirm(`Clear all ${count} game(s) from history? Teams are kept. Undo can bring them back.`, 'Clear')) return;
+            this.removeGames(this.state.gameHistory.map(g => g.id), 'clearHistory');
+        }
+
+        /**
+         * Remove games from history as one undoable action.
+         * @param {Array<string|number>} gameIds Game ids.
+         * @param {string} action Undo label.
+         * @returns {void}
+         */
+        removeGames(gameIds, action) {
+            this.state.pushUndo(action);
+            this.state.removeFromHistory(gameIds);
+            this.state.addLog(`Removed ${gameIds.length} game(s) from history`, 'warning');
+            this.state.syncToStorage();
+            this.statsView.renderAll();
+            this.updateUI();
         }
 
         /**
@@ -901,15 +972,54 @@
             const host = document.getElementById('exportTeamNames');
             if (host) {
                 const standings = this.statsView.aggregateTeamStandings();
+                const labels = this.exportLabels();
                 host.innerHTML = standings.map(t => `
                     <div class="export-team-row">
                         <span class="export-team-swatch" style="background:${t.teamColor}"></span>
                         <input type="text" class="export-team-input" data-team="${this.statsView.escapeHtml(t.team)}"
-                            value="${this.statsView.escapeHtml(t.team)}" />
+                            aria-label="Poster name for ${this.statsView.escapeHtml(t.team)}"
+                            value="${this.statsView.escapeHtml(labels[t.team] || t.team)}" />
                         <span class="export-team-pts">${t.points} pts</span>
                     </div>`).join('');
             }
             this.statsView.openModal('exportModal');
+        }
+
+        /**
+         * Saved poster names by team.
+         * @returns {Object<string, string>} Team name to poster name.
+         */
+        exportLabels() {
+            try {
+                return JSON.parse(H.Storage.getItem(EXPORT_LABELS_KEY)) || {};
+            } catch (err) {
+                return {};
+            }
+        }
+
+        /**
+         * Remember the poster names currently in the export dialog.
+         * @returns {void}
+         */
+        saveExportLabels() {
+            const labels = this.exportLabels();
+            document.querySelectorAll('#exportTeamNames .export-team-input').forEach(inp => {
+                const value = inp.value.trim();
+                if (value && value !== inp.dataset.team) labels[inp.dataset.team] = value;
+                else delete labels[inp.dataset.team];
+            });
+            H.Storage.setItem(EXPORT_LABELS_KEY, JSON.stringify(labels));
+        }
+
+        /**
+         * Forget every saved poster name.
+         * @returns {void}
+         */
+        clearExportLabels() {
+            H.Storage.removeItem(EXPORT_LABELS_KEY);
+            document.querySelectorAll('#exportTeamNames .export-team-input').forEach(inp => {
+                inp.value = inp.dataset.team;
+            });
         }
 
         /**
@@ -922,10 +1032,8 @@
             const title = (titleInput && titleInput.value.trim()) || 'Hive Event';
             this._eventTitle = title;
 
-            const labels = {};
-            document.querySelectorAll('#exportTeamNames .export-team-input').forEach(inp => {
-                labels[inp.dataset.team] = (inp.value.trim() || inp.dataset.team);
-            });
+            this.saveExportLabels();
+            const labels = this.exportLabels();
             const relabelTeam = name => labels[name] || name;
 
             if (kind === 'winners') {
@@ -941,11 +1049,11 @@
 
         /**
          * Wipe all statistics while keeping team rosters.
-         * @returns {void}
+         * @returns {Promise<void>} Resolves when wiped or canceled.
          */
-        wipeStatistics() {
-            if (!confirm('Wipe all statistics? This clears the current game, all scores, player stats, and game ' +
-                'history. Your teams are kept. This cannot be undone.')) return;
+        async wipeStatistics() {
+            if (!await H.Dialog.confirm('Wipe all statistics? This clears the current game, all scores, player stats, and game ' +
+                'history. Your teams are kept. This cannot be undone.', 'Wipe')) return;
             this.state.wipeStatistics();
             this.state.syncToStorage();
             this.state.addLog('Statistics wiped (teams kept)', 'warning');
@@ -962,41 +1070,40 @@
             this.settingsView.collectFromDom();
             this.points.save();
             this.updateGamemodeDropdowns();
-            alert('Settings saved successfully!');
+            H.Toast.show('Settings saved successfully!', 'Settings', '', 3500);
             this.state.addLog('Settings updated', 'success');
         }
 
         /**
          * Create a custom gamemode with base point keys.
-         * @returns {void}
+         * @returns {Promise<void>} Resolves when created or canceled.
          */
-        addNewGamemode() {
-            const name = prompt('Enter new gamemode name:');
-            if (!name || !name.trim()) return;
-            const trimmed = name.trim();
-            if (this.points.pointSystems[trimmed]) { alert('Gamemode already exists!'); return; }
+        async addNewGamemode() {
+            const trimmed = await H.Dialog.prompt('New gamemode name:', 'Create');
+            if (!trimmed) return;
+            if (this.points.pointSystems[trimmed]) { H.Toast.show('Gamemode already exists!', '', 'warning'); return; }
             this.points.pointSystems[trimmed] = { '1st place': 4, '2nd place': 3, '3rd place': 2 };
             this.points.gamemodeFeatures[trimmed] = { kills: false, bedBreaks: false, individualFinish: false, teamFinish: false, individualSurvival: false };
             this.updateGamemodeDropdowns();
             const sel = document.getElementById('settingsGamemode'); if (sel) sel.value = trimmed;
             this.settingsView.renderAll();
-            alert(`Gamemode "${trimmed}" created! Configure its settings and save.`);
+            H.Toast.show(`Gamemode "${trimmed}" created! Configure its settings and save.`, 'Settings', '', 3500);
         }
 
         /**
          * Delete the selected custom gamemode.
-         * @returns {void}
+         * @returns {Promise<void>} Resolves when deleted or canceled.
          */
-        deleteGamemode() {
+        async deleteGamemode() {
             const mode = this.settingsView.selectedGamemode();
-            if (H.PointSystem.DEFAULT_MODES.includes(mode)) { alert('Cannot delete default gamemodes!'); return; }
-            if (!confirm(`Delete gamemode "${mode}"? This cannot be undone.`)) return;
+            if (H.PointSystem.DEFAULT_MODES.includes(mode)) { H.Toast.show('Cannot delete default gamemodes!', '', 'warning'); return; }
+            if (!await H.Dialog.confirm(`Delete gamemode "${mode}"? This cannot be undone.`, 'Delete')) return;
             delete this.points.pointSystems[mode];
             delete this.points.gamemodeFeatures[mode];
             this.points.save();
             this.updateGamemodeDropdowns();
             this.settingsView.renderAll();
-            alert(`Gamemode "${mode}" deleted!`);
+            H.Toast.show(`Gamemode "${mode}" deleted!`, 'Settings', '', 3500);
         }
 
         /**
@@ -1021,10 +1128,10 @@
                     this.points.importSettings(JSON.parse(ev.target.result));
                     this.updateGamemodeDropdowns();
                     this.settingsView.renderAll();
-                    alert('Settings imported successfully!');
+                    H.Toast.show('Settings imported successfully!', 'Settings', '', 3500);
                     this.state.addLog('Settings imported', 'success');
                 } catch (err) {
-                    alert('Error importing settings: Invalid file format');
+                    H.Toast.show('Error importing settings: Invalid file format', '', 'warning');
                     console.error(err);
                 }
             };
@@ -1070,7 +1177,7 @@
                 H.Toast.show('Tournament data loaded.', 'Loaded', '', 4000);
                 this.state.addLog('Data imported from JSON file', 'success');
             } catch (err) {
-                alert('Error loading data: Invalid JSON file format');
+                H.Toast.show('Error loading data: Invalid JSON file format', '', 'warning');
                 console.error(err);
                 this.state.addLog('Failed to import data', 'error');
             }

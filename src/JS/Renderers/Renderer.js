@@ -50,33 +50,6 @@
             m.classList.add('open');
             m.setAttribute('aria-hidden', 'false');
         }
-
-        /**
-         * Count up/down to a new value for the quick-stat cards.
-         * @param {string} elementId Element id.
-         * @param {number} newValue Target value.
-         * @returns {void}
-         */
-        animateNumber(elementId, newValue) {
-            const el = this.$(elementId);
-            if (!el) return;
-            const current = parseInt(el.textContent, 10) || 0;
-            if (current === newValue) return;
-            el.classList.add('updating');
-            const steps = 20, duration = 500;
-            const inc = (newValue - current) / steps;
-            let val = current, step = 0;
-            const timer = setInterval(() => {
-                step++; val += inc;
-                if (step >= steps) {
-                    el.textContent = newValue;
-                    clearInterval(timer);
-                    setTimeout(() => el.classList.remove('updating'), 500);
-                } else {
-                    el.textContent = Math.round(val);
-                }
-            }, duration / steps);
-        }
     }
 
     global.Hive = global.Hive || {};

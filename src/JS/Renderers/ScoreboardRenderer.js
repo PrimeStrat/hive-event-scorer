@@ -21,13 +21,16 @@
                     .sort((a, b) => b[1].score - a[1].score)
                     .filter(([, d]) => d.score > 0);
                 if (sorted.length) {
-                    placements = sorted.slice(0, 3)
-                        .map(([t, d]) => `${t.substring(0, 3)}:${d.score}`).join(' | ');
+                    const { ChatUtils } = global.Hive;
+                    placements = sorted.slice(0, 3).map(([t, d]) => {
+                        const rank = sorted.findIndex(([, other]) => other.score === d.score) + 1;
+                        return `${ChatUtils.ordinal(rank)} ${t} - ${d.score}`;
+                    }).join('\n');
                 }
             }
 
-            this.animateNumber('totalTeams', teamCount);
-            this.animateNumber('totalPlayers', playerCount);
+            const tt = this.$('totalTeams'); if (tt) tt.textContent = teamCount;
+            const pc = this.$('totalPlayers'); if (pc) pc.textContent = playerCount;
             const tp = this.$('teamPlacements'); if (tp) tp.textContent = placements;
             const cm = this.$('currentGamemode'); if (cm) cm.textContent = this.state.gamemode || 'None';
         }
