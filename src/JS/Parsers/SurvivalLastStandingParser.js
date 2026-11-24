@@ -9,7 +9,7 @@
 
     class SurvivalLastStandingParser extends Base {
         /**
-         * Any non-noise line naming exactly one registered player is that
+         * A non-noise line that starts with one registered player is that
          * player's elimination.
          * @param {string} clean Stripped chat line.
          * @returns {boolean} True when the line scored.
@@ -22,8 +22,8 @@
                 const me = this.resolvePlayerName('You');
                 return me ? this.recordDeath(me) !== false : false;
             }
-            if (players.length === 1) return this.recordDeath(players[0]) !== false;
-            return false;
+            if (players.length !== 1 || !clean.replace(/^\u00BB\s*/, '').startsWith(players[0])) return false;
+            return this.recordDeath(players[0]) !== false;
         }
 
         /**

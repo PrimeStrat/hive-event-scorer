@@ -127,7 +127,7 @@
             if (settings.pointSystems) this.pointSystems = PointSystem.mergePointSystems(settings.pointSystems);
             this.gamemodeFeatures = PointSystem.mergeFeatures(settings.gamemodeFeatures);
             if (settings.detectionPatterns) this.detectionPatterns = settings.detectionPatterns;
-            if (typeof settings.myIgn === 'string') this.myIgn = settings.myIgn;
+            if (typeof settings.myIgn === 'string' && settings.myIgn) this.myIgn = settings.myIgn;
             for (const key of BOOLEAN_SETTINGS) {
                 if (typeof settings[key] === 'boolean') this[key] = settings[key];
             }

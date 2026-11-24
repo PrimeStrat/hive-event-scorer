@@ -61,6 +61,7 @@
          */
         detectDistrictElimination(clean) {
             if (!/District\s+\d+\s+has been\s+ELIMINATED/i.test(clean)) return false;
+            if (this.engine.teamsFinalized()) return true;
 
             const candidate = this.engine.getActiveTeams().find(t => this.engine.isTeamFullyEliminated(t)) ||
                 this.inferEliminatedTeam();

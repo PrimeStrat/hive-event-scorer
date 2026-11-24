@@ -136,7 +136,7 @@
          * @returns {string[]} Team names.
          */
         getActiveTeams() {
-            return Object.keys(this.state.teams).filter(t => !this.state.eliminationOrder.includes(t));
+            return this.scorableTeams().filter(t => !this.state.eliminationOrder.includes(t));
         }
 
         /**
@@ -194,7 +194,7 @@
          * @returns {void}
          */
         recordTeamEliminationPlacement(teamName) {
-            const totalTeams = Object.keys(this.state.teams).length;
+            const totalTeams = this.scorableTeams().length;
             const position = totalTeams - this.state.eliminationOrder.indexOf(teamName);
             this.recordTeamPlacement(teamName, position);
         }
@@ -217,6 +217,7 @@
          * @returns {void}
          */
         finalizeFromSurvival() {
+            if (this.teamsFinalized()) return;
             const active = this.getActiveTeams();
             if (active.length === 0) return;
             if (active.length === 1) {
@@ -256,7 +257,32 @@
                 const outlasted = order.length - i;
                 this.recordTeamPlacement(order[i], sharedFirst ? outlasted + 1 : tiedCount + outlasted);
             }
+            this.markTeamsFinalized();
+        }
+
+        /**
+         * True once this game's team placements have been handed out.
+         * @returns {boolean} Whether team placements are final.
+         */
+        teamsFinalized() {
+            return !!(this.state.currentGame && this.state.currentGame.teamsFinalized);
+        }
+
+        /**
+         * Mark the game complete with final team placements.
+         * @returns {void}
+         */
+        markTeamsFinalized() {
+            if (this.state.currentGame) this.state.currentGame.teamsFinalized = true;
             this.state.currentGameCompleted = true;
+        }
+
+        /**
+         * Teams that can place; the UNKNOWN catch-all is not a competitor.
+         * @returns {string[]} Team names.
+         */
+        scorableTeams() {
+            return Object.keys(this.state.teams).filter(t => this.isScorableTeam(t));
         }
 
         /**
@@ -265,19 +291,19 @@
          * @returns {void}
          */
         finalizeGamePlacements(winnerTeam) {
-            const totalTeams = Object.keys(this.state.teams).length;
+            const totalTeams = this.scorableTeams().length;
             if (winnerTeam && !this.hasPlacement(winnerTeam, '1st place')) {
                 this.recordTeamPlacement(winnerTeam, 1);
             }
             for (let i = 0; i < this.state.eliminationOrder.length; i++) {
                 this.recordTeamPlacement(this.state.eliminationOrder[i], totalTeams - i);
             }
-            for (const teamName of Object.keys(this.state.teams)) {
+            for (const teamName of this.scorableTeams()) {
                 if (teamName !== winnerTeam && !this.state.eliminationOrder.includes(teamName)) {
                     this.recordTeamPlacement(teamName, 2);
                 }
             }
-            this.state.currentGameCompleted = true;
+            this.markTeamsFinalized();
         }
 
         /**
@@ -325,8 +351,8 @@
 
         /**
          * Rank every player from elimination order (survivors on top) and award
-         * last-standing team bonuses. Block Party ties among survivors follow
-         * blockPartyTieMode; shared-first pushes eliminated players down one slot.
+         * last-standing team bonuses. Ties among survivors follow blockPartyTieMode;
+         * shared-first pushes eliminated players down one slot.
          * @returns {void}
          */
         finalizePlayerPlacements() {
@@ -337,7 +363,7 @@
             const finalPositions = [];
             const order = this.state.playerEliminationOrder.filter(n => this.isScorablePlayer(n));
             const survivors = players.filter(n => !order.includes(n)).sort((a, b) => a.localeCompare(b));
-            const isBlockPartyTie = this.state.gamemode === 'Block Party' && survivors.length > 1;
+            const isTie = survivors.length > 1;
             const tieMode = this.points.blockPartyTieMode || 'shared-first';
             const place = (name, pos) => {
                 const team = this.state.findPlayerTeam(name);
@@ -346,14 +372,13 @@
             };
 
             order.forEach((name, i) => {
-                place(name, (isBlockPartyTie && tieMode === 'shared-first') ? order.length - i + 1 : totalPlayers - i);
+                place(name, (isTie && tieMode === 'shared-first') ? order.length - i + 1 : totalPlayers - i);
             });
 
-            if (isBlockPartyTie) {
-                const tiedPosition = tieMode === 'shared-placement' ? survivors.length : 1;
-                survivors.forEach(name => place(name, tiedPosition));
-            } else {
-                survivors.forEach((name, i) => place(name, survivors.length - i));
+            const tiedPosition = isTie && tieMode === 'shared-placement' ? survivors.length : 1;
+            survivors.forEach(name => place(name, tiedPosition));
+            if (isTie) {
+                this.state.addLog(`Tied survivors: ${survivors.join(', ')}. Remove anyone who did not play, or edit the score in History.`, 'warning');
             }
 
             const bestByTeam = {};

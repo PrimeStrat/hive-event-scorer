@@ -128,6 +128,13 @@
                 /\brank to\b/i.test(clean) ||
                 /\bupgraded\b.*\bby\b/i.test(clean) ||
                 /\bunlocked\b.*\bby\b/i.test(clean) ||
+                /custom server invite/i.test(clean) ||
+                /Attempting to join\b/i.test(clean) ||
+                /wants you to join their party/i.test(clean) ||
+                /\bkicked .+? from the server\b/i.test(clean) ||
+                /invited all of their friends/i.test(clean) ||
+                /has just purchased\b/i.test(clean) ||
+                /\bwon with \d+ votes\b/i.test(clean) ||
                 /Your tracking compass is pointing to/i.test(clean);
         }
 
@@ -337,6 +344,7 @@
         detectTeamElimination(clean) {
             const m = clean.match(/(.+?)\s+(?:Team\s+)?has been (?:ELIMINATED|eliminated)!?$/i);
             if (!m) return false;
+            if (this.engine.teamsFinalized()) return true;
             let teamName = this.resolveTeamFromLabel(m[1].trim());
 
             if (teamName) {
@@ -401,6 +409,7 @@
         detectWinner(clean) {
             const m = clean.match(/(.+?)\s+(?:Team\s+)?(?:is the WINNER|are the WINNERS|are the champions?|is the champion)!?$/i);
             if (!m) return false;
+            if (this.engine.teamsFinalized()) return true;
             let teamName = this.resolveTeamFromLabel(m[1].trim());
 
             if (!teamName || this.state.eliminationOrder.includes(teamName)) {
